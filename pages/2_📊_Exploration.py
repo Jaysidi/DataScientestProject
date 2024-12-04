@@ -1,10 +1,10 @@
 import streamlit as st
+
 st.set_page_config(
     page_title="Exploration des données",
     layout="wide",
     menu_items={}
 )
-import pandas as pd
 import plotly.express as px
 
 from Libraries.Data import uvl_df, vgsales_original_df, metacritic_scores_df, vgsales_cleaned_df, vgsales_new_df
@@ -24,7 +24,9 @@ st.markdown("""### Constations
 * Valeurs Unknown (203) pour Publisher""")
 
 with st.expander('Afficher les lignes en question'):
-    st.dataframe(vgsales_original_df.loc[(vgsales_original_df['Publisher'] == 'Unknown') | (vgsales_original_df['Publisher'].isna()) | vgsales_original_df['Year'].isna()])
+    st.dataframe(vgsales_original_df.loc[
+                     (vgsales_original_df['Publisher'] == 'Unknown') | (vgsales_original_df['Publisher'].isna()) |
+                     vgsales_original_df['Year'].isna()])
 
 st.markdown("""### WebScrapping  
 Les données ont été récupérées et exportées dans des fichiers csv afin de pouvoir compléter les informations du jeu de données original.  
@@ -32,7 +34,6 @@ Les données ont été récupérées et exportées dans des fichiers csv afin de
 * VGChartz - MetaCritic - UVLIST (scripts et csv en annexes du rendu final)""")
 
 with st.expander('Afficher les données VGChartz'):
-
     st.text(f"VGChartz : {vgsales_new_df.shape[0]} lignes")
     st.dataframe(vgsales_new_df.head(50))
     df_plat_count = vgsales_original_df["Platform"].value_counts().reset_index()
@@ -96,8 +97,6 @@ with st.expander('Afficher les données MetaCritic'):
     st.plotly_chart(fig)
 
 with st.expander('Afficher les données UVLIST'):
-
-
     st.text(f"UVLIST : {uvl_df.shape[0]} lignes")
     st.dataframe(uvl_df.head(50))
     df_plat_count = vgsales_original_df["Platform"].value_counts().reset_index()
@@ -127,7 +126,5 @@ st.write(
     unsafe_allow_html=True)
 afficher_clean = st.checkbox('Afficher les données nettoyées')
 if afficher_clean:
-
     st.text(f"Fichier complété : {vgsales_cleaned_df.shape[0]} lignes")
     st.dataframe(vgsales_cleaned_df.head(50))
-

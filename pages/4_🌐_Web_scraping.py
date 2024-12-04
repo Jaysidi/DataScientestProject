@@ -1,4 +1,5 @@
 import streamlit as st
+
 st.set_page_config(
     page_title="WebScraping de données complémentaires",
     layout="wide",
@@ -8,7 +9,7 @@ st.set_page_config(
 from Libraries.Data import vgsales_cleaned_df, vgsales_original_df, uvl_df, metacritic_scores_df, metacritic_scores_md, \
     metacritic_reviews_md, metacritic_user_reviews_df
 
-st.image("WS.png")
+st.image("Images/WS.png")
 
 tab1, tab2, tab3 = st.tabs(['Remplacement des NaN', 'Enrichissement', 'Analyse de sentiment'])
 with tab1:
@@ -28,7 +29,7 @@ with tab1:
 * Le site Mobigames (https://www.mobygames.com/) répertoriant 289,909 références""")
     st.markdown("## 1. UVList - https://www.uvlist.net/gamesearch/")
     with st.popover("Aperçu du site"):
-        st.image("uvlist_game_grid_preview.png")
+        st.image("Images/uvlist_game_grid_preview.png")
     st.markdown("""
     Les données ont été collectées à l'aide de la librairie *lxml* et par le biais des *XPath* des éléments du code html.  
     Le scrap a permis ici de récupérer le nom des jeux, l'URL du détail des jeux, leurs plateformes, l'année de sortie 
@@ -36,7 +37,7 @@ with tab1:
     st.dataframe(uvl_df.head())
     st.write("## 2. VGChartz - https://www.vgchartz.com/gamedb/")
     with st.popover("Aperçu du site"):
-        st.image("vgchartz_game_grid_preview.png")
+        st.image("Images/vgchartz_game_grid_preview.png")
     st.markdown("""
     Les données ont été collectées à l'aide de la librairie BeautifulSoup.  
     Afin de voir si nous ouvions avoir des information plus à jour, notamment concernant les volumes de ventes des jeux,
@@ -47,7 +48,7 @@ with tab1:
 
     st.write("## 3. Metacritic - https://www.metacritic.com/browse/game/")
     with st.popover("Aperçu du site"):
-        st.image("meta_game_grid_preview.png")
+        st.image("Images/meta_game_grid_preview.png")
     st.markdown("""
         Les données ont été collectées à l'aide de la librairie BeautifulSoup.
         
@@ -60,7 +61,7 @@ with tab1:
 
     st.write("## 4. MobyGames - https://www.mobygames.com/")
     with st.popover("Aperçu du site"):
-        st.image("mobigames_game_grid_preview.png")
+        st.image("Images/mobigames_game_grid_preview.png")
     st.markdown("""
         Les données ont été collectées à l'aide de la librairie BeautifulSoup.  
         
@@ -74,13 +75,13 @@ with tab2:
     catégorielles et, dans le cadre de notre projet, les seules variables quantitatives sont les variables cibles 
     (*Nombre de jeux vendus par région*, en million):""")
     with st.popover("Aperçu du site"):
-        st.image("vgchartz_game_grid_preview.png")
+        st.image("Images/vgchartz_game_grid_preview.png")
     st.dataframe(vgsales_cleaned_df.head(5))
     st.markdown(f"""Dans le but d'enrichir notre jeu de données et permettre d'entrainer plus finement nos modèles, 
     nous avons fusionné les données de base (Kaggle) et celles récupérées par sur le site Metacritic.  
     Les informations complémentaires recueillies sont, pour chacun des couple jeu/plateforme:""")
     with st.popover("Aperçu du site"):
-        st.image("meta_score_details_preview.png")
+        st.image("Images/meta_score_details_preview.png")
     st.markdown(f"""
 * Le développeur 
 * La date complète de sortie
@@ -110,7 +111,7 @@ des jeux ayant un minimum de 50 commentaires, en nous limitant à 500 commentair
 La librairie BeautifulSoup a été utilisée pour analyser les données recueillies au format JSON via l'API du site, 
 sans laquelle l'opération aurait été impossible dans des délais raisonnable (page dynamique). """)
     with st.popover("Aperçu du site"):
-        st.image("meta_user_review_preview.png")
+        st.image("Images/meta_user_review_preview.png")
     st.markdown(f"""
 Nous avons recueilli les informations suivantes:  
 * Le nom du jeu
@@ -124,7 +125,8 @@ Nous avons recueilli les informations suivantes:
 * Un flag si l'avis est jugé être un "spoiler"
 """)
     st.write("#### Aperçu des données")
-    st.caption("Le fichier csv généré faisant 381 Mo, seul un échantillon de 1000 lignes prises aléatoirement ont été chargées")
+    st.caption(
+        "Le fichier csv généré faisant 381 Mo, seul un échantillon de 1000 lignes prises aléatoirement ont été chargées")
     st.dataframe(metacritic_user_reviews_df.head())
     with st.expander("Metadata de l'ensemble des données recueillies", expanded=False, icon='📝'):
         st.markdown(metacritic_reviews_md)

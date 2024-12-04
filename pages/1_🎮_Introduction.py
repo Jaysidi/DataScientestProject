@@ -1,4 +1,5 @@
 import streamlit as st
+
 st.set_page_config(
     page_title="Introduction - Projet jeux vidéo",
     layout="wide",
@@ -6,8 +7,7 @@ st.set_page_config(
 )
 from Libraries.Data import vgsales_cleaned_df
 
-
-st.image("pixel_art.jpg")
+st.image("Images/pixel_art.jpg")
 st.markdown("""
 # Analyse des ventes de jeux vidéo
 
@@ -49,15 +49,9 @@ It is based on BeautifulSoup using Python.
 There are 16,598 records. 2 records were dropped due to incomplete information.
 """)
 
-
-
 st.title("Introduction")
 st.dataframe(vgsales_cleaned_df.head(10))
 st.write(vgsales_cleaned_df.shape)
 st.dataframe(vgsales_cleaned_df.describe())
 if st.checkbox("Afficher les NA"):
     st.dataframe(vgsales_cleaned_df.isna().sum())
-
-
-
-
