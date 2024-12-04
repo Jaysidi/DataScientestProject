@@ -44,6 +44,17 @@ models_tried = {
     'GradientBoostingRegressor': GradientBoostingRegressor()
 }
 
+XGBRegressor_hyperparameters = {
+    'eta': np.arange(0.12, 0.15, 0.01),
+    'max_depth': np.arange(5, 8, 1),
+    'subsample': np.arange(0.8, 1, 0.1)
+}
+
+
+@st.cache_resource
+def fit_model(model_to_fit, x_fit, y_fit):
+    return model_to_fit.fit(x_fit, y_fit)
+
 
 def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, verbose=True, graph=False):
     """
@@ -77,10 +88,12 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
 
     results['y_range'] = y_range
     if verbose:
-        st.markdown(f"#### ⚠️ **Les métriques sont calculées sur les valeurs brutes <-> {y_range_reverted}**")
+        st.markdown(f"#### ⚠️ **Les métriques sont calculées sur les valeurs brutes: "
+                    f"{str(y_range_reverted[0])} -> {str(y_range_reverted[1])} million(s) de ventes**")
 
     for model_name, model in models.items():
         model.fit(x_train, y_train)
+        # fit_model(model, x_train, y_train)
         y_pred_train = model.predict(x_train)
         y_pred_train_unscaled = np.round(y_scaler.inverse_transform(y_pred_train.reshape(-1, 1), ).ravel(), 2)
 
@@ -109,17 +122,17 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
                                    {'Train':
                                         {'R²': r2_train,
                                          #  'F1_Score': f1_score_train,
-                                         'MAE': mae_train,
-                                         'MSE': mse_train,
-                                         'MedAE': median_ae_train,
-                                         'RMSE': rmse_train},
+                                         'Mean Absolute Error': mae_train,
+                                         'Mean Squared Error': mse_train,
+                                         'Median Absolute Error': median_ae_train,
+                                         'Root Mean Squared Error': rmse_train},
                                     'Test':
                                         {'R²': r2_test,
                                          # 'F1_Score': f1_score_test,
-                                         'MAE': mae_test,
-                                         'MSE': mse_test,
-                                         'MedAE': median_ae_test,
-                                         'RMSE': rmse_test}},
+                                         'Mean Absolute Error': mae_test,
+                                         'Mean Squared Error': mse_test,
+                                         'Median Absolute Error': median_ae_test,
+                                         'Root Mean Squared Error': rmse_test}},
                                'Model_instance':
                                    model
                                }
@@ -194,3 +207,15 @@ def plot_xgb_feature_importances(model, title_prefix=''):
                     max_num_features=10, xlabel='Cover', title='', ax=ax3)
     # plt.tight_layout()
     plt.show()
+
+def prepare_xgbregressor_model():
+    eta = st.sidebar.select_slider('eta', np.arange(0.12, 0.15, 0.01), value=0.13)
+    max_depth = st.sidebar.select_slider('max_depth', np.arange(5, 8, 1), value=7)
+    subsample = st.sidebar.select_slider('subsample', np.arange(0.8, 1, 0.1), value=0.9)
+    hyperparameters = {
+        'eta': eta,
+        'max_depth': max_depth,
+        'subsample': subsample
+    }
+
+    return {'XGBRegressor': XGBRegressor(hyperparameters)}
