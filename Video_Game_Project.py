@@ -6,5 +6,12 @@ st.set_page_config(
     menu_items={}
 )
 st.image("Images/pixel_art.jpg")
-st.title("ANALYSE EXPLORATOIRE ET MODELISATION DES VENTES GLOBALES DE JEUX VIDEO AVANT 2017")
-st.write("### François Dumont - Thomas Bouffay - Olivier Steinbauer")
+st.title("DataScientest - Octobre 2024")
+st.header("Projet de formation Data Analyst")
+st.header("ANALYSE EXPLORATOIRE ET MODELISATION DES VENTES GLOBALES DE JEUX VIDEO")
+st.markdown("""  
+  
+  
+#### François Dumont - Thomas Bouffay - Olivier Steinbauer""")
+
+

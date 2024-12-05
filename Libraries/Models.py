@@ -1,19 +1,11 @@
 import streamlit as st
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import statsmodels.api as sm
-import re
-import os
 
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
-from sklearn.preprocessing import PowerTransformer
-
-import category_encoders as ce
+import plotly.graph_objects as go
 
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 
@@ -50,13 +42,94 @@ XGBRegressor_hyperparameters = {
     'subsample': np.arange(0.8, 1, 0.1)
 }
 
+def get_xgbregressor_features_importances(model, i_types, ):
+    """
+        Function to return XGBoost feature f_importances for each type in i_types.
+        i_types can be : gain, weight, cover, total_weight, total_cover.
+        Args:
+          model: XGBoost model instance.
+          i_types: list of importance_type to return.
+        Returns:
+          dict of DataFrame {type: DataFrame([features, f_importances])}.
+        """
+    f_importances = {}
+    for i_type in i_types:
+        fi = model.get_booster().get_score(importance_type=i_type)
+        fi = pd.DataFrame.from_dict(fi, orient='index').reset_index()
+        fi.columns = ['Feature', 'ImportanceValue']
+        f_importances[i_type] = fi
+    return f_importances
 
-@st.cache_resource
-def fit_model(model_to_fit, x_fit, y_fit):
-    return model_to_fit.fit(x_fit, y_fit)
+
+# @st.cache_resource
+# def fit_model(model_to_fit, x_fit, y_fit):
+#     return model_to_fit.fit(x_fit, y_fit)
 
 
-def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, verbose=True, graph=False):
+def plot_xgb_feature_importances(f_importances, max_features=np.inf, title_prefix=''):
+    """
+    Function to plot top 'max_features' XGBoost feature importances in f_importances
+    Args:
+      f_importances: dict of DataFrame {type: DataFrame([features, f_importances])}.
+      max_features: max number of feature importances to plot.
+      title_prefix: string to add to the title.
+    Returns:
+      None
+    """
+    if max_features != np.inf:
+        st.write(f"{title_prefix} Top {max_features} feature importances")
+    else:
+        st.write(f"{title_prefix} Feature importances")
+
+    cols = st.columns(len(f_importances))
+    for i, col_i in enumerate(cols):
+        with col_i:
+            key = list(f_importances.keys())[i]
+            fi_sorted = f_importances[key].sort_values(by='ImportanceValue', ascending=True).tail(max_features)
+
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=fi_sorted['ImportanceValue'],
+                                 y=fi_sorted['Feature'],
+                                 orientation='h',
+                                 text=round(fi_sorted['ImportanceValue'],2),
+                                 marker_color='LightSkyBlue',
+                                 marker_line=dict(width=1, color='gray'),
+                                 opacity=0.9
+                                 ))
+            fig.update_layout(xaxis_title=key.capitalize(),
+                              margin=dict(t=20, b=50)
+                              )
+            st.plotly_chart(fig, use_container_width=True)
+
+
+def qq_plot_plotly(data):
+    qq_data = sm.qqplot(data, fit=True, line='s').gca().lines
+    fig = go.Figure()
+    fig.add_trace({
+        'type': 'scatter',
+        'x': qq_data[0].get_xdata(),
+        'y': qq_data[0].get_ydata(),
+        'mode': 'markers',
+        'marker': {
+            'color': '#19d3f3'
+        }
+    })
+
+    fig.add_trace({
+        'type': 'scatter',
+        'x': qq_data[1].get_xdata(),
+        'y': qq_data[1].get_ydata(),
+        'mode': 'lines',
+        'line': {
+            'color': '#636efa'
+        }})
+    fig.update_layout(
+        title="Quartile to quartile plot of the target 'Global_Sales' as normality test",
+        showlegend=False,
+        width=600
+    )
+    return fig
+def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, verbose=True, graph=False, plot_shap=False):
     """
     Function to help test and tune different models.
     Train models and compute different metrics to help compare them.
@@ -67,13 +140,14 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
       x_test: X test data
       y_train: y train data
       y_test: y test data
-      verbose: boolean to print metrics
-      graph: boolean to plot graph of predictions vs real values
       y_scaler: fitted scaler instance used for target
       test_size: test size used for train test split (in %)
-
+      verbose: boolean to print metrics
+      graph: boolean to plot graph of predictions vs real values
+      plot_shap: boolean to plot shap values
     Returns:
       results: a dict with model names as keys and metrics as values.
+
 
     """
     results = {}
@@ -123,90 +197,89 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
                                         {'R²': r2_train,
                                          #  'F1_Score': f1_score_train,
                                          'Mean Absolute Error': mae_train,
-                                         'Mean Squared Error': mse_train,
                                          'Median Absolute Error': median_ae_train,
+                                         'Mean Squared Error': mse_train,
                                          'Root Mean Squared Error': rmse_train},
                                     'Test':
                                         {'R²': r2_test,
                                          # 'F1_Score': f1_score_test,
                                          'Mean Absolute Error': mae_test,
-                                         'Mean Squared Error': mse_test,
                                          'Median Absolute Error': median_ae_test,
+                                         'Mean Squared Error': mse_test,
                                          'Root Mean Squared Error': rmse_test}},
                                'Model_instance':
                                    model
                                }
+
         if graph:
-            fig, ax = plt.subplots(figsize=(4, 3))
-            plt.plot(y_test_unscaled, y_test_unscaled, 'r--', lw=0.5)
-            sns.scatterplot(x=y_test_unscaled.ravel(), y=y_pred_test_unscaled, color='orange', alpha=0.5)
-            plt.xlabel('Valeurs de test (Brutes)', fontsize=8)
-            plt.ylabel('Valeurs prédites (Brutes)', fontsize=9)
-            plt.title(f'{model_name}\n'
-                      f'Valeurs de test vs Valeurs prédites.\nTest split = {round(test_size)}%',
-                      fontsize=8)
+            fig = go.Figure()
+            fig.add_traces([go.Scatter(x=y_test_unscaled,
+                                    y=y_test_unscaled,
+                                    line=dict(
+                                        color='Orange',
+                                        width=1,
+                                    dash='dot')),
+                            go.Scatter(x=y_test_unscaled.ravel(),
+                                       y=y_pred_test_unscaled,
+                                       mode='markers',
+                                       marker=dict(
+                                           color='LightSkyBlue',
+                                           opacity = 0.3,
+                                           size=8,
+                                           line=dict(
+                                               color='Black',
+                                               width=1)
+                                           )
+                                       ) ])
+            fig.update_layout(xaxis_title="Valeurs de test (Brutes)",
+                              yaxis_title="Valeurs prédites (Brutes)",
+                              showlegend=False,
+                              margin=dict(l=20, r=20, t=20, b=20),
+                              title=f'{model_name}\n'
+                                    f'Valeurs de test vs Valeurs prédites.\nTest split = {round(test_size)}%')
             if not verbose:
                 st.subheader(f"Modèle {model_name}")
-                st.pyplot(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
+                if model_name == "XGBRegressor":
+                    plot_xgb_feature_importances(results[model_name]['Model_instance'], model_name)
         if verbose:
             st.subheader(f"Modèle {model_name}")
-            col1, col2, col3 = st.columns(3)
+            # col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
 
             with col1:
-                st.write("### Métriques")
+                st.write("#### Métriques")
                 st.dataframe(results[model_name]['Metrics'])
 
             with col2:
                 if graph:
-                    st.pyplot(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True)
 
+        if graph:
+            if model_name == "XGBRegressor":
+                f_i = get_xgbregressor_features_importances(results[model_name]['Model_instance'],
+                                                      ['gain', 'weight', 'cover'])
+                plot_xgb_feature_importances(f_i, 10, model_name)
+                if plot_shap:
+                    st.write("### SHAP values")
+                    shap_values_test = shap.TreeExplainer(results[model_name]['Model_instance']).shap_values(x_test)
 
+                    x_test_array = x_test.values
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        fig1 = plt.figure()
+                        shap.summary_plot(shap_values_test, x_test_array, plot_type="bar",
+                                          feature_names=x_test.columns)
+                        st.pyplot(fig1, use_container_width=False)
 
-
-            # st.write(f"{model_name}: \n "
-            #          f"Metrics on TRAIN values:\n\n"
-            #          f"R2= {r2_train}\t\t"
-            #          # f"F1_Score= {f1_score_train}\t"
-            #          f"MAE= {mae_train}\t "
-            #          f"MSE= {mse_train}\t "
-            #          f"RMSE= {rmse_train}\t "
-            #          f"MedAE= {median_ae_train}"
-            #          f"\n\n"
-            #          f"Metrics on TEST values:\n\n"
-            #          f"R2= {r2_test}\t "
-            #          # f"F1_Score= {f1_score_test}\t"
-            #          f"MAE= {mae_test}\t "
-            #          f"MSE= {mse_test}\t "
-            #          f"RMSE= {rmse_test}\t "
-            #          f"MedAE= {median_ae_test}"
-            #          f"\n\n")
-
+                    with col2:
+                        fig2 = plt.figure()
+                        shap.summary_plot(shap_values_test, x_test_array, feature_names=x_test.columns)
+                        st.pyplot(fig2, use_container_width=False)
     return results
 
 
-def plot_xgb_feature_importances(model, title_prefix=''):
-    """
-    Function to plot XGBoost feature importances.
-    3 types are drawn: gain, weight, cover.
-    Args:
-      model: XGBoost model instance.
-      title_prefix: string to add to the title.
-    Returns:
-      None
-    """
-    plt.figure(figsize=(5, 10))
-    ax1 = plt.subplot(311)
-    plot_importance(model, importance_type='gain', show_values=False,
-                    max_num_features=10, xlabel='Gain',
-                    title=title_prefix + "\nFeature importance - Top 10", ax=ax1)
-    ax2 = plt.subplot(312)
-    plot_importance(model, importance_type='weight', show_values=False,
-                    max_num_features=10, xlabel='Weight', title='', ax=ax2)
-    ax3 = plt.subplot(313)
-    plot_importance(model, importance_type='cover', show_values=False,
-                    max_num_features=10, xlabel='Cover', title='', ax=ax3)
-    # plt.tight_layout()
-    plt.show()
+
 
 def prepare_xgbregressor_model():
     eta = st.sidebar.select_slider('eta', np.arange(0.12, 0.15, 0.01), value=0.13)

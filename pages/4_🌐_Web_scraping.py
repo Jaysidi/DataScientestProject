@@ -9,6 +9,17 @@ st.set_page_config(
 from Libraries.Data import vgsales_cleaned_df, vgsales_original_df, uvl_df, metacritic_scores_df, metacritic_scores_md, \
     metacritic_reviews_md, metacritic_user_reviews_df
 
+st.markdown("""
+        <style>
+               .block-container {
+                    padding-top: 1rem;
+                    padding-bottom: 2rem;
+                    padding-left: 5rem;
+                    padding-right: 5rem;
+                }
+        </style>
+        """, unsafe_allow_html=True)
+
 st.image("Images/WS.png")
 
 tab1, tab2, tab3 = st.tabs(['Remplacement des NaN', 'Enrichissement', 'Analyse de sentiment'])
