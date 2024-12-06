@@ -1,9 +1,11 @@
+import pickle
+import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
 import uuid
-
+import os
 import plotly.graph_objects as go
 
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
@@ -35,6 +37,8 @@ XGBRegressor_hyperparameters = {
     'max_depth': np.arange(5, 8, 1),
     'subsample': np.arange(0.8, 1, 0.1)
 }
+
+model_path = "Models"
 
 def get_xgbregressor_features_importances(model, i_types, ):
     """
@@ -126,7 +130,10 @@ def qq_plot_plotly(data):
         width=600
     )
     return fig
-def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, verbose=True, graph=False, plot_shap=False):
+
+
+def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, verbose=True, graph=False, plot_shap=False,
+               param_name=''):
     """
     Function to help test and tune different models.
     Train models and compute different metrics to help compare them.
@@ -142,6 +149,7 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
       verbose: boolean to print metrics
       graph: boolean to plot graph of predictions vs real values
       plot_shap: boolean to plot shap values
+      param_name: str to use in the file name for saving/loading the fitted model
     Returns:
       results: a dict with model names as keys and metrics as values.
 
@@ -164,7 +172,11 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
     for model_name, model in models.items():
         # model.fit(x_train, y_train)
         with st.spinner(f"Fitting {model_name}..."):
-            fit_model(model, x_train, y_train)
+            if not os.path.exists(os.path.join(model_path, model_name+param_name+'.joblib')):
+                fit_model(model, x_train, y_train)
+                # joblib.dump(model,os.path.join(model_path, model_name+param_name+'.joblib'))
+            else:
+                model = joblib.load(os.path.join(model_path, model_name+param_name+'.joblib'))
         # y_pred_train = model.predict(x_train)
         with st.spinner(f"Predict values from {model_name}..."):
             y_pred_train = predict_model(model, x_train)

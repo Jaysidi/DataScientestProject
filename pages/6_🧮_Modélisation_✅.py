@@ -38,15 +38,21 @@ target_columns = ['Global_Sales', 'NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sal
 target_col = 'Global_Sales'
 drop_columns.remove(target_col)
 all_data_preprocessed = (vgsales_metacritic_scores_df.copy().drop(columns=drop_columns))
-
+pretrained = st.sidebar.checkbox("Modèles pré-entrainés", value=True)
+param_name = "_"
 st.sidebar.write("***Options***")
 t_r = (all_data_preprocessed[target_col].min(), all_data_preprocessed[target_col].max())
-target_range = st.sidebar.slider("Sélectionnez les ventes maximum",
-                   t_r[0],
-                   t_r[1],
-                   t_r[1])
 
-test_size = st.sidebar.select_slider("Test size en %", np.arange(10, 35, 5), value=20)
+if not pretrained:
+    target_max = st.sidebar.slider("Sélectionnez les ventes maximum",
+                                   t_r[0],
+                                   t_r[1],
+                                   t_r[1])
+    test_size = st.sidebar.select_slider("Test size en %", np.arange(10, 35, 5), value=20)
+    all_data_preprocessed = all_data_preprocessed[all_data_preprocessed[target_col] <= target_max]
+else:
+    test_size = 25
+    param_name += f"ts25_tm{t_r[1]}"
 c1, c2, c3 = st.sidebar.columns(3)
 with c1:
     verbosity = st.checkbox("Verb.", value=True)
@@ -54,7 +60,7 @@ with c2:
     plot_pred = st.checkbox("Plot", value=True)
 with c3:
     plot_shap = st.checkbox("Shap", value=False)
-all_data_preprocessed = all_data_preprocessed[all_data_preprocessed[target_col] <= target_range]
+
 feats = all_data_preprocessed.drop(columns=target_col)
 target = all_data_preprocessed[target_col]
 
@@ -109,7 +115,7 @@ with tab2:
         st.write("Cible")
         st.dataframe(target.head(nb_lignes))
         st.write(f"""Valeur minimum = {target.min()}    
-        Valeur minimum = {target.max()}""")
+        Valeur maximum = {target.max()}""")
         # fig, ax = plt.subplots(figsize=(3, 3))
         # sm.qqplot(target, fit=True, line='s', ax=ax)
 
@@ -121,20 +127,30 @@ with tab2:
     feats = b_encoder.fit_transform(feats)
 
     feats['Type'] = feats['Type'].map({'Salon': 1, 'Portable': 0})
-
-    X_train, X_test, y_train, y_test = train_test_split(feats, target, test_size=test_size / 100)
+    if pretrained:
+        random_s = 27
+    else:
+        random_s = None
+    X_train, X_test, y_train, y_test = train_test_split(feats, target,
+                                                        test_size=test_size / 100,
+                                                        random_state=random_s)
 
     num_col = ['Critic_score', 'Critic_positive_reviews', 'Critic_mixed_reviews',
                'Critic_negative_reviews', 'User_score', 'User_positive_reviews',
                'User_mixed_reviews', 'User_negative_reviews']
     x_train_scaled = X_train.copy()
     x_test_scaled = X_test.copy()
-    x_encoders = ["StandardScaler", "RobustScaler", "MinMaxScaler"]
-    scaler_x = st.sidebar.radio(
-        "Encodage des variables numériques",
-        x_encoders,
-        captions=[],
-    )
+    if not pretrained:
+        x_encoders = ["StandardScaler", "RobustScaler", "MinMaxScaler"]
+        scaler_x = st.sidebar.radio(
+            "Encodage des variables numériques",
+            x_encoders,
+            captions=[],
+        )
+    else:
+        scaler_x = "MinMaxScaler"
+        param_name += f"_xMMS"
+
     if scaler_x == "StandardScaler":
         x_scaler = StandardScaler()
         x_train_scaled[num_col] = x_scaler.fit_transform(x_train_scaled[num_col])
@@ -148,8 +164,12 @@ with tab2:
         x_train_scaled[num_col] = x_scaler.fit_transform(x_train_scaled[num_col])
         x_test_scaled[num_col] = x_scaler.transform(x_test_scaled[num_col])
 
+    y_encoder_map = {"RobustScaler": "RSc", "Box-Cox": "BC", "Yéo-Johnson": "YJ", "QuantileTransformer": "QT"}
     # y_encoders = ["RobustScaler", "Box-Cox", "Yéo-Johnson", "QuantileTransformer"]
-    y_encoders = ["RobustScaler", "Box-Cox", "QuantileTransformer"]
+    if not pretrained:
+        y_encoders = ["RobustScaler", "Box-Cox", "QuantileTransformer"]
+    else:
+        y_encoders = ["RobustScaler", "Box-Cox"]
     if target_col != 'Global_Sales':
         y_encoders.remove("Box-Cox")
 
@@ -158,8 +178,11 @@ with tab2:
         y_encoders,
         captions=[],
     )
-    if scaler_y == "Box-Cox":
-        standard = st.sidebar.checkbox("Standard BC", value=False)
+    param_name += f"_y{y_encoder_map[scaler_y]}"
+    if (scaler_y == "Box-Cox" or scaler_y == "Yéo-Johnson") and not pretrained:
+        standard = st.sidebar.checkbox("Standardize BC/YJ", value=False)
+    else:
+        standard = False
     if scaler_y == "RobustScaler":
         y_scaler = RobustScaler()
         y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
@@ -169,7 +192,7 @@ with tab2:
         y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
         y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
     elif scaler_y == "Yéo-Johnson":
-        y_scaler = PowerTransformer(method='yeo-johnson', standardize=False)
+        y_scaler = PowerTransformer(method='yeo-johnson', standardize=standard)
         y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
         y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
     elif scaler_y == "QuantileTransformer":
@@ -211,7 +234,8 @@ with tab2:
                            test_size=test_size,
                            verbose=verbosity,
                            graph=plot_pred,
-                           plot_shap=plot_shap)
+                           plot_shap=plot_shap,
+                           param_name=param_name)
 
 with tab3:
     tab2_col1, tab2_col2, tab2_col3, tab2_col4 = st.columns(4)
@@ -222,8 +246,11 @@ with tab3:
     with tab2_col3:
         subsample = st.select_slider('subsample', np.arange(0.8, 1.01, 0.1), value=0.9)
     with tab2_col4:
-        n_estimators = st.select_slider('n_estimators', np.arange(100, 1600, 100), value=100)
-
+        if not pretrained:
+            n_estimators = st.select_slider('n_estimators', np.arange(100, 1600, 100), value=100)
+        else:
+            n_estimators = 100
+    hyper_name = f"_eta{eta}_md{max_depth}_subs{subsample}_nes{n_estimators}"
     hyperparameters = {
         'eta': eta,
         'max_depth': max_depth,
@@ -240,7 +267,10 @@ with tab3:
                        y_test_scaled,
                        y_scaler=y_scaler,
                        test_size=test_size,
-                       verbose=verbosity, graph=plot_pred, plot_shap=plot_shap)
+                       verbose=verbosity,
+                       graph=plot_pred,
+                       plot_shap=plot_shap,
+                       param_name=param_name+hyper_name)
 
 with tab4:
     st.title("Analyse de sentiment")
