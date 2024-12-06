@@ -1,30 +1,24 @@
-import streamlit as st
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
+import uuid
 
 import plotly.graph_objects as go
 
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 
-from xgboost import XGBRegressor, plot_importance, plot_tree
+from xgboost import XGBRegressor
 
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 
-from sklearn.metrics import f1_score
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import median_absolute_error
 
 import shap
-
+import streamlit as st
 models_tried = {
     'LinearRegression': LinearRegression(),
     'Ridge': Ridge(),
@@ -61,9 +55,12 @@ def get_xgbregressor_features_importances(model, i_types, ):
     return f_importances
 
 
-# @st.cache_resource
-# def fit_model(model_to_fit, x_fit, y_fit):
-#     return model_to_fit.fit(x_fit, y_fit)
+def fit_model(model, x, y):
+    model.fit(x, y)
+
+
+def predict_model(model, x):
+    return model.predict(x)
 
 
 def plot_xgb_feature_importances(f_importances, max_features=np.inf, title_prefix=''):
@@ -92,14 +89,14 @@ def plot_xgb_feature_importances(f_importances, max_features=np.inf, title_prefi
                                  y=fi_sorted['Feature'],
                                  orientation='h',
                                  text=round(fi_sorted['ImportanceValue'],2),
-                                 marker_color='LightSkyBlue',
+                                 marker=dict(color='LightSkyBlue'),
                                  marker_line=dict(width=1, color='gray'),
                                  opacity=0.9
                                  ))
             fig.update_layout(xaxis_title=key.capitalize(),
                               margin=dict(t=20, b=50)
                               )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key = uuid.uuid4())
 
 
 def qq_plot_plotly(data):
@@ -166,9 +163,12 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
                     f"{str(y_range_reverted[0])} -> {str(y_range_reverted[1])} million(s) de ventes**")
 
     for model_name, model in models.items():
-        model.fit(x_train, y_train)
-        # fit_model(model, x_train, y_train)
-        y_pred_train = model.predict(x_train)
+        # model.fit(x_train, y_train)
+        with st.spinner(f"Fitting {model_name}..."):
+            fit_model(model, x_train, y_train)
+        # y_pred_train = model.predict(x_train)
+        with st.spinner(f"Predict values from {model_name}..."):
+            y_pred_train = predict_model(model, x_train)
         y_pred_train_unscaled = np.round(y_scaler.inverse_transform(y_pred_train.reshape(-1, 1), ).ravel(), 2)
 
         y_pred_test = model.predict(x_test)
@@ -210,9 +210,9 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
                                'Model_instance':
                                    model
                                }
-
+        fig = go.Figure()
         if graph:
-            fig = go.Figure()
+            # fig = go.Figure()
             fig.add_traces([go.Scatter(x=y_test_unscaled,
                                     y=y_test_unscaled,
                                     line=dict(
@@ -239,7 +239,7 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
                                     f'Valeurs de test vs Valeurs prédites.\nTest split = {round(test_size)}%')
             if not verbose:
                 st.subheader(f"Modèle {model_name}")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key = uuid.uuid4())
                 if model_name == "XGBRegressor":
                     plot_xgb_feature_importances(results[model_name]['Model_instance'], model_name)
         if verbose:
@@ -253,7 +253,7 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
 
             with col2:
                 if graph:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key = uuid.uuid4())
 
         if graph:
             if model_name == "XGBRegressor":
@@ -262,20 +262,21 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
                 plot_xgb_feature_importances(f_i, 10, model_name)
                 if plot_shap:
                     st.write("### SHAP values")
-                    shap_values_test = shap.TreeExplainer(results[model_name]['Model_instance']).shap_values(x_test)
+                    with st.spinner(f"Computing SHAP interpretation..."):
+                        shap_values_test = shap.TreeExplainer(results[model_name]['Model_instance']).shap_values(x_test)
 
-                    x_test_array = x_test.values
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        fig1 = plt.figure()
-                        shap.summary_plot(shap_values_test, x_test_array, plot_type="bar",
-                                          feature_names=x_test.columns)
-                        st.pyplot(fig1, use_container_width=False)
+                        x_test_array = x_test.values
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            fig1 = plt.figure()
+                            shap.summary_plot(shap_values_test, x_test_array, plot_type="bar",
+                                              feature_names=x_test.columns)
+                            st.pyplot(fig1, use_container_width=False)
 
-                    with col2:
-                        fig2 = plt.figure()
-                        shap.summary_plot(shap_values_test, x_test_array, feature_names=x_test.columns)
-                        st.pyplot(fig2, use_container_width=False)
+                        with col2:
+                            fig2 = plt.figure()
+                            shap.summary_plot(shap_values_test, x_test_array, feature_names=x_test.columns)
+                            st.pyplot(fig2, use_container_width=False)
     return results
 
 

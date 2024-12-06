@@ -9,3 +9,5 @@ shap
 scikit-learn
 xgboost
 plotly
+joblib
+scipy

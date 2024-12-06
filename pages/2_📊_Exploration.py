@@ -1,25 +1,25 @@
-import streamlit as st
+import uuid
+import plotly.express as px
+from Libraries.Data import uvl_df, vgsales_original_df, metacritic_scores_df, vgsales_cleaned_df, vgsales_new_df
 
+import streamlit as st
 st.set_page_config(
     page_title="Exploration des données",
     layout="wide",
     menu_items={}
 )
-import plotly.express as px
-
-from Libraries.Data import uvl_df, vgsales_original_df, metacritic_scores_df, vgsales_cleaned_df, vgsales_new_df
 
 st.markdown("""
         <style>
                .block-container {
-                    padding-top: 1rem;
+                    padding-top: 3rem;
                     padding-bottom: 2rem;
                     padding-left: 5rem;
                     padding-right: 5rem;
                 }
         </style>
         """, unsafe_allow_html=True)
-
+st.image("Images/exploration.png")
 st.markdown("""### Exploration  
 Le dataset contient 16598 lignes indexées de 0 à 16597.  
 Il est composé de 3 types de données:
@@ -150,7 +150,7 @@ with st.expander('Afficher les données VGChartz'):
     fig.update_layout(barmode='group')
     fig.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
     fig.update_layout(xaxis_title="Platform", yaxis_title="Nombre de jeux")
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 
 with st.expander('Afficher les données MetaCritic'):
     update_platform_name = {'Dreamcast': 'DC',
@@ -192,7 +192,7 @@ with st.expander('Afficher les données MetaCritic'):
     fig.update_layout(barmode='group')
     fig.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
     fig.update_layout(xaxis_title="Platform", yaxis_title="Nombre de jeux")
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 
 with st.expander('Afficher les données UVLIST'):
     st.text(f"UVLIST : {uvl_df.shape[0]} lignes")
@@ -213,7 +213,7 @@ with st.expander('Afficher les données UVLIST'):
     fig.update_layout(barmode='group')
     fig.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
     fig.update_layout(xaxis_title="Platform", yaxis_title="Nombre de jeux")
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 
 st.write("* Quatre lignes ont été mises à jour manuellement, leurs dates étant supérieur à 2016, année de collecte des données.")
 df_last_miss = vgsales_original_df[vgsales_original_df.Year > 2016]
@@ -224,5 +224,5 @@ st.image("Images/last_duplicates.png")
 st.write("* Suppression des 60 lignes dont la correspondance n'a pu être faîte malgré la somme d'informations récupérée.")
 
 if st.checkbox('Afficher les données nettoyées'):
-    st.text(f"Fichier complété : {vgsales_cleaned_df.shape[0]} lignes complètes sur les {vgsales_original_df.shape[0]} lignes de départ.")
+    st.text(f"Fichier complété : {vgsales_cleaned_df.shape[0]} lignes conservées sur les {vgsales_original_df.shape[0]} lignes de départ.")
     st.dataframe(vgsales_cleaned_df.head(50))

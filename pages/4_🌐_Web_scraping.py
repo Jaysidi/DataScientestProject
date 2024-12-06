@@ -1,13 +1,12 @@
-import streamlit as st
+from Libraries.Data import (vgsales_cleaned_df, vgsales_original_df, uvl_df, metacritic_scores_df, \
+                            metacritic_scores_md, metacritic_reviews_md, metacritic_user_reviews_df)
 
+import streamlit as st
 st.set_page_config(
     page_title="WebScraping de données complémentaires",
     layout="wide",
     menu_items={}
 )
-
-from Libraries.Data import vgsales_cleaned_df, vgsales_original_df, uvl_df, metacritic_scores_df, metacritic_scores_md, \
-    metacritic_reviews_md, metacritic_user_reviews_df
 
 st.markdown("""
         <style>
@@ -32,7 +31,7 @@ with tab1:
     na_summary.columns = ['Variable', '# NaN', '% total']
     st.dataframe(na_summary)
     st.markdown("""Afin de réduire au maximum la suppression de ligne, nous avons tenté de récupérer ces informations manquantes en les recherchant par la technique du Web Scraping.  
-    Quatre sites différents ont été scrappés: 
+    Quatre sites différents ont été '*scrapés*': 
     
 * Le site Universal Videogame List (https://www.uvlist.net/gamesearch/) répertoriant 160,912 références
 * Le site d'origine du jeu de données VGChartz (https://www.vgchartz.com/gamedb/) répertoriant 65,865 références
@@ -51,8 +50,8 @@ with tab1:
         st.image("Images/vgchartz_game_grid_preview.png")
     st.markdown("""
     Les données ont été collectées à l'aide de la librairie BeautifulSoup.  
-    Afin de voir si nous ouvions avoir des information plus à jour, notamment concernant les volumes de ventes des jeux,
-    nous avons reparcouru l'ensemble des jeux résents sur le site.  
+    Afin de voir si nous pouvions avoir des information plus à jour, notamment concernant les volumes de ventes des jeux,
+    nous avons parcouru à nouveau l'ensemble des jeux résents sur le site.  
     
     Il s'est avéré que les informations actuellement présentes sont malheureusement moins complète que lors du scrape 
     de 2016 (source Kaggle).""")

@@ -1,3 +1,5 @@
+from Libraries.Data import vgsales_original_df
+
 import streamlit as st
 
 st.set_page_config(
@@ -5,7 +7,6 @@ st.set_page_config(
     layout="wide",
     menu_items={}
 )
-from Libraries.Data import vgsales_original_df
 
 st.markdown("""
         <style>

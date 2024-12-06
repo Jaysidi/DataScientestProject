@@ -1,18 +1,19 @@
-import streamlit as st
-
-st.set_page_config(
-    page_title="Visualisation des données",
-    layout="wide",
-    menu_items={}
-)
-from Libraries.Data import vgsales_cleaned_df
-
+import uuid
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import seaborn as sns
+
+from Libraries.Data import vgsales_cleaned_df
+
+import streamlit as st
+st.set_page_config(
+    page_title="Visualisation des données",
+    layout="wide",
+    menu_items={}
+)
 
 st.markdown("""
         <style>
@@ -31,22 +32,22 @@ st.write("### Evolution du nombre de jeux sortis par année")
 
 fig = go.Figure()
 fig.add_trace(go.Histogram(x=vgsales_cleaned_df.Year,
-                           marker_color='darkorange',
+                           marker=dict(color='darkorange'),
                            marker_line=dict(width=2, color='black')))
 fig.update_layout(bargap=0.2, title='Évolution du nombre de jeux sortis par année',
                 xaxis_title = "Année de sortie",
                 yaxis_title = "Nombre de jeux",
                 height = 500)
-st.plotly_chart(fig)
+st.plotly_chart(fig, key = uuid.uuid4())
 
 st.write("### Comparaison du nombre de jeux sortis et celui du nombre de ventes médian par année de sortie")
-fig, ax = plt.subplots(figsize=(15, 10))
+fig, ax = plt.subplots(figsize=(13, 6))
 sns.set_style("whitegrid", {'axes.grid' : False})
 sns.lineplot(x='Year', y='Global_Sales', data=vgsales_cleaned_df, ax=ax, label='Nombre de ventes médian des jeux\n(en million)\nAvec la répartition inter-percentiles\n(2.5%-97.5%)', errorbar="pi", estimator="median")
 sns.move_legend(ax, "upper left")
 ax.set_xlabel('Année de sortie des jeux', labelpad = 15, fontsize = 16)
 ax.set_ylabel('Nombre de ventes\n(en million)', labelpad = 15, fontsize = 16)
-ax.set_title('Nombre de ventes médian des jeux par année de sortie\nNombre de jeux sortis par année', fontsize = 16);
+ax.set_title('Nombre de ventes médian des jeux par année de sortie\nNombre de jeux sortis par année', fontsize = 16)
 ax2 = ax.twinx()
 game_counts = vgsales_cleaned_df.Year.value_counts().sort_index()
 # sns.lineplot(x=game_counts.index, y=game_counts.values, ax = ax2, label='Nombre de jeux sortis')
@@ -75,7 +76,7 @@ with st.expander("Afficher TOP 10 des jeux"):
                                         "Marché Nord Américain",
                                         "Marché autres région",
                                         "Marché globale"))
-    fig.append_trace(
+    fig.add_trace(
         go.Bar(y=top10_EU["Name"],
               x=top10_EU["EU_Sales"],
               orientation='h',
@@ -83,7 +84,7 @@ with st.expander("Afficher TOP 10 des jeux"):
               name='Europe'),
         row=1, col=1,
                 )
-    fig.append_trace(
+    fig.add_trace(
         go.Bar(y=top10_JP["Name"],
               x=top10_JP["JP_Sales"],
               orientation='h',
@@ -91,7 +92,7 @@ with st.expander("Afficher TOP 10 des jeux"):
               name='Japon'),
         row=2, col=1
                 )
-    fig.append_trace(
+    fig.add_trace(
         go.Bar(y=top10_NA["Name"],
               x=top10_NA["NA_Sales"],
               orientation='h',
@@ -99,7 +100,7 @@ with st.expander("Afficher TOP 10 des jeux"):
               name='Amérique du Nord'),
         row=3, col=1
                 )
-    fig.append_trace(
+    fig.add_trace(
         go.Bar(y=top10_Other["Name"],
               x=top10_Other["Other_Sales"],
               orientation='h',
@@ -107,7 +108,7 @@ with st.expander("Afficher TOP 10 des jeux"):
               name='Autres régions'),
         row=4, col=1
                 )
-    fig.append_trace(
+    fig.add_trace(
         go.Bar(y=top10_Gl["Name"],
               x=top10_Gl["Global_Sales"],
               orientation='h',
@@ -124,7 +125,7 @@ with st.expander("Afficher TOP 10 des jeux"):
     fig.update_layout(title="Top 10 des jeux par nombre de ventes",
                       xaxis_title="Nombre de ventes (en million)",
                       height=2400,width=800)
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 st.write("### Top 5 des éditeurs par régions")
 
 with st.expander("Afficher TOP 5 des éditeurs"):
@@ -173,7 +174,7 @@ with st.expander("Afficher TOP 5 des éditeurs"):
                     dict(text='Global', x=sum(fig.get_subplot(3, 1).x) / 2, y=(sum(fig.get_subplot(3, 1).y))*0.98 / 2,
                           font_size=20, showarrow=False, xanchor="center")],
         height=1300, width=800)
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 st.write("### Top 5 des plateformes par régions")
 
 with st.expander("Afficher TOP 5 des plateformes"):
@@ -222,7 +223,7 @@ with st.expander("Afficher TOP 5 des plateformes"):
                     dict(text='Global', x=sum(fig.get_subplot(3, 1).x) / 2, y=(sum(fig.get_subplot(3, 1).y))*0.98 / 2,
                           font_size=20, showarrow=False, xanchor="center")],
         height=1300, width=800)
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 st.write("### Ventes globales (distinction du type de plateforme)")
 
 with st.expander("Afficher les ventes globales par type de plateforme"):
@@ -249,13 +250,13 @@ with st.expander("Afficher les ventes globales par type de plateforme"):
     fig.add_trace(go.Bar(y = df_salon_sales["Global_Sales"], x = df_salon_sales["Platform"],name="Consoles de salon",text=round(df_salon_sales["Global_Sales"],2), textposition='auto'), row=1, col=1)
     fig.add_trace(go.Bar(y = df_portable_sales["Global_Sales"], x = df_portable_sales["Platform"],name="Consoles portables",text=round(df_portable_sales["Global_Sales"],2), textposition='auto'), row=2, col=1)
     fig.update_layout(width=800,height=800,title_text="Ventes globales de jeux par type d'équipment (en millions de copies vendues)")
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 st.write("### Ventes régionales de jeux par type de support")
 
 with st.expander("Afficher les ventes régionales de jeux par type de support"):
     vgsales_cleaned_df['Platform'].unique()
     li_salon = ['Wii','NES','X360','PS3','PS2','SNES','PS4','N64','PS','XB','PC','2600','XOne','GC','GEN','DC','SAT','SCD','NG','TG16','3DO','PCFX']
-    li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
+    # li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
 
     vgsales_cleaned_df['Type'] = np.where(vgsales_cleaned_df['Platform'].isin(li_salon), 'Salon', 'Portable')
 
@@ -294,7 +295,7 @@ with st.expander("Afficher les ventes régionales de jeux par type de support"):
               text=round(df_salon_other_sales["Other_Sales"],2), textposition='auto'), row=4, col=1)
 
     fig.update_layout(width=800,height=1200,title_text="Ventes régionales de jeux sur équipments de salons (en millions de copies vendues)")
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 
     fig = make_subplots(rows=2, cols=2, subplot_titles=("Ventes en Amérique du Nord", "Ventes en Europe", "Ventes au Japon", "Ventes dans les autres régions"))
 
@@ -304,13 +305,13 @@ with st.expander("Afficher les ventes régionales de jeux par type de support"):
     fig.add_trace(go.Bar(y = df_portable_other_sales["Other_Sales"], x = df_portable_other_sales["Platform"],name="Ventes autres régions",text=round(df_portable_other_sales["Other_Sales"],2), textposition='auto'), row=2, col=2)
 
     fig.update_layout(width=800,height=800,title_text="Ventes régionales de jeux sur équipements portables (en millions de copies vendues)")
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 st.markdown("### Volume de jeux édités par plateforme au fil du temps pour le type Salon")
 
 with st.expander("Afficher les volumes de jeux édités par plateforme au fil du temps (Salon)"):
     vgsales_cleaned_df['Platform'].unique()
     li_salon = ['Wii','NES','X360','PS3','PS2','SNES','PS4','N64','PS','XB','PC','2600','XOne','GC','GEN','DC','SAT','SCD','NG','TG16','3DO','PCFX']
-    li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
+    # li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
 
     vgsales_cleaned_df['Type'] = np.where(vgsales_cleaned_df['Platform'].isin(li_salon), 'Salon', 'Portable')
 
@@ -324,7 +325,7 @@ with st.expander("Afficher les volumes de jeux édités par plateforme au fil du
 
     df_salon_sales = df_plat_year_count.loc[df_plat_year_count['Type'] == "Salon"].sort_values(by='Year', ascending=True)
 
-    #vu le nombre de plateforme il faut rajouter plusieurs palettes de couleurs
+    #vu le nombre de plateformes, il faut rajouter plusieurs palettes de couleurs
     #color_sequence = px.colors.qualitative.Dark2 + px.colors.qualitative.Vivid
 
     fig = px.bar(df_salon_sales,
@@ -364,13 +365,13 @@ with st.expander("Afficher les volumes de jeux édités par plateforme au fil du
             ),
 
         )
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 st.write("### Volume de jeux édités par plateforme au fil du temps pour le type Portable")
 
 with st.expander("Afficher les volumes de jeux édités par plateforme au fil du temps (Portable)"):
     vgsales_cleaned_df['Platform'].unique()
     li_salon = ['Wii','NES','X360','PS3','PS2','SNES','PS4','N64','PS','XB','PC','2600','XOne','GC','GEN','DC','SAT','SCD','NG','TG16','3DO','PCFX']
-    li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
+    # li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
 
     vgsales_cleaned_df['Type'] = np.where(vgsales_cleaned_df['Platform'].isin(li_salon), 'Salon', 'Portable')
 
@@ -384,7 +385,7 @@ with st.expander("Afficher les volumes de jeux édités par plateforme au fil du
 
     df_portable_sales = df_plat_year_count.loc[df_plat_year_count['Type'] == "Portable"].sort_values(by='Year', ascending=True)
 
-    #vu le nombre de plateforme il faut rajouter plusieurs palettes de couleurs
+    #vu le nombre de plateformes, il faut rajouter plusieurs palettes de couleurs
     #color_sequence = px.colors.qualitative.Dark2
 
     fig = px.bar(df_portable_sales,
@@ -423,13 +424,13 @@ with st.expander("Afficher les volumes de jeux édités par plateforme au fil du
             ),
 
         )
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
 st.write("### Durée moyenne du marché de développement d'un jeu sur une plateforme")
 
 with st.expander("Durée moyenne du marché de développement d'un jeu"):
     vgsales_cleaned_df['Platform'].unique()
     li_salon = ['Wii','NES','X360','PS3','PS2','SNES','PS4','N64','PS','XB','PC','2600','XOne','GC','GEN','DC','SAT','SCD','NG','TG16','3DO','PCFX']
-    li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
+    # li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
 
     vgsales_cleaned_df['Type'] = np.where(vgsales_cleaned_df['Platform'].isin(li_salon), 'Salon', 'Portable')
 
@@ -482,7 +483,7 @@ with st.expander("Durée moyenne du marché de développement d'un jeu"):
             ),
 
         )
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())
     df_plat_year_count = vgsales_cleaned_df.groupby(['Type','Platform', 'Year']).size().reset_index(name='Count').sort_values(by='Year', ascending=False)
 
     df_portable_sales = df_plat_year_count.loc[df_plat_year_count['Type'] == "Portable"].sort_values(by='Year', ascending=False)
@@ -527,4 +528,4 @@ with st.expander("Durée moyenne du marché de développement d'un jeu"):
             ),
 
         )
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key = uuid.uuid4())

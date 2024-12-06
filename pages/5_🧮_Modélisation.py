@@ -1,21 +1,28 @@
-import streamlit as st
+import numpy as np
+import pandas as pd
+import re
+import joblib
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.express as px
 
+import shap
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import PowerTransformer, StandardScaler, MinMaxScaler
+from sklearn.preprocessing import TargetEncoder
+from category_encoders import CountEncoder
+from scipy.special import inv_boxcox
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, median_absolute_error
+
+from Libraries.Data import vgsales_cleaned_df
+
+import streamlit as st
 st.set_page_config(
     page_title="Conception d'un modèle de Machine Learning des données",
     layout="wide",
     menu_items={})
-
-import numpy as np
-import pandas as pd
-import category_encoders as ce
-
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler, RobustScaler, PowerTransformer, QuantileTransformer, StandardScaler
-from xgboost import XGBRegressor
-
-from matplotlib import pyplot as plt
-from Libraries.Data import vgsales_metacritic_scores_df
-from Libraries.Models import run_models, models_tried, qq_plot_plotly
 
 st.markdown("""
         <style>
@@ -29,192 +36,731 @@ st.markdown("""
         """, unsafe_allow_html=True)
 
 st.image("Images/ML.png")
-
-drop_columns = ['Name', 'NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']
-target_columns = ['Global_Sales', 'NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales']
-
-# target_col = st.selectbox('Choix de la cible', target_columns)
-target_col = 'Global_Sales'
-drop_columns.remove(target_col)
-
-st.sidebar.write("***Options***")
-test_size = st.sidebar.select_slider("Test size en %", np.arange(10, 35, 5), value=20)
-c1, c2, c3 = st.sidebar.columns(3)
-with c1:
-    verbosity = st.checkbox("Verb.", value=True)
-with c2:
-    plot_pred = st.checkbox("Plot", value=True)
-with c3:
-    plot_shap = st.checkbox("Shap", value=True)
-
-all_data_preprocessed = (
-    vgsales_metacritic_scores_df.copy().drop(columns=drop_columns))
-feats = all_data_preprocessed.drop(columns=target_col)
-target = all_data_preprocessed[target_col]
-
-
-tab0, tab1, tab2, tab3, tab4 = st.tabs(["Présentation des données", "Encodage", "Recherche d'un modèle", "XGBoost Regressor", "Analyse de sentiments"], )
-with tab0:
-    st.header("Jeu de données utilisé")
-    st.markdown("""Pour la modélisation finale, nous avons travaillé sur le jeu de données enrichi par celles récupérées sur le site Metacritic.  """)
-    st.dataframe(feats.head())
-    st.markdown(
-        """Pour la cible, nous nous sommes concentrés sur les ventes globales (*Global_Sales*) des jeux""")
-
+tab1, tab2 = st.tabs(['Préparation', 'Modélisation'])
 with tab1:
-    st.header("Préparation des données <-> Encodage des variables")
-    nunique = pd.DataFrame(vgsales_metacritic_scores_df[['Platform', 'Year', 'Genre', 'Publisher', 'Rate', 'Developer', 'Type']].nunique())
-    nunique.columns = ['Valeur unique']
-    st.markdown(f"""Après avoir testé le ***One Hot Encoder*** et rapidement constaté le trop grand nombre de colonnes générées ~= {nunique['Valeur unique'].sum()-4}""")
-    st.dataframe(nunique)
-    st.markdown("""Nous sommes passés au ***Binary Encoder*** """)
-    st.code("""import category_encoders as ce  
-b_encoder = ce.BinaryEncoder(cols=cat_col, return_df=True)  
-ce.BinaryEncoder(cols=['Genre'], return_df=True).fit_transform(vgsales_metacritic_scores_df).sample(10)[['Genre_0', 'Genre_1', 'Genre_2', 'Genre_3']])""")
-    st.markdown(f"""Le ***Binary Encoder*** encode sur n bits chaque catégorie de telle sorte que $2^n < nb.values$.  
-    Pour la variable '*Genre*' cela donne $n=4$ soit $2^4=16$ valeurs possible, pour 11 valeurs uniques à encoder. Nous avons donc 4 colonnes au lieur de 10.""")
-    st.dataframe(ce.BinaryEncoder(cols=['Genre'], return_df=True).fit_transform(vgsales_metacritic_scores_df).sample(10)[['Genre_0', 'Genre_1', 'Genre_2', 'Genre_3']])
-    st.caption("Sur un échantillon de 10 lignes au hasard")
-    st.markdown("""La différence est encore plus notable avec la variable *Developer* et ses 1006 valeurs uniques -> $n=10$,  soit $2^{10}=1024 > 1006$.  
-    10 colonnes au lieu de 1005 !
-    """)
+    # on passe les Name en minuscules dans df_uvlist et df_no_year
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.lower()
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.lower()
+    # on retire toutes les informations inutiles dans le nom de df_no_year, elles sont entre parenthèses (JP sales), etc.
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.split('(').str[0]
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.split('(').str[0]
+
+    # On ne conserve que les mots et les espaces dans les Names
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
+
+    # on remplace les espaces doubles par des simples
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.replace("  ", " ")
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.replace("  ", " ")
+
+    # on retire tous les espaces en début et fin de Name
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.strip()
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.strip()
+
+    li_salon = ['Wii', 'NES', 'X360', 'PS3', 'PS2', 'SNES', 'PS4', 'N64', 'PS', 'XB', 'PC', '2600', 'XOne', 'GC', 'GEN',
+                'DC', 'SAT', 'SCD', 'NG', 'TG16', '3DO', 'PCFX']
+    li_portable = ['GB', 'DS', 'GBA', '3DS', 'PSP', 'WiiU', 'PSV', 'WS', 'GG']
+    vgsales_cleaned_df['Type'] = np.where(vgsales_cleaned_df['Platform'].isin(li_salon), 'Salon', 'Portable')
+    vgsales_cleaned_df['Year'] = vgsales_cleaned_df['Year'].astype(int)
+
+    st.write("### Préparation des données")
+    st.write(
+        "Suite à l'exploration initiale des données et nos premières constatations, nous ajoutons le type de plateforme Salon/Portable.")
+
+    code = '''
+  li_salon = ['Wii','NES','X360','PS3','PS2','SNES','PS4','N64','PS','XB','PC','2600','XOne','GC','GEN','DC','SAT','SCD','NG','TG16','3DO','PCFX']
+  li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
+  df['Type'] = np.where(df['Platform'].isin(li_salon), 'Salon', 'Portable')'''
+
+    st.code(code)
+
+    st.write("Nous passons aussi l'année en entier.")
+    code = '''df['Year'] = df['Year'].astype(int)'''
+    st.code(code)
+    ### FIN PARTIE 1
+    ### Affichage des premières lignes du df
+    st.dataframe(vgsales_cleaned_df.head())
+
+    ### PARTIE 2 - étude la répartition de Global_Sales
+
+    st.write("### Répartition de la variable Global_Sales")
+    st.write(
+        "Les différents modèles que nous avons essayés, lors de notre première tentative, renvoyaient des résultats nuls ou négatifs, quelques fussent les variations !")
+    st.write(
+        "Il est apparu clair que la distribution de la variable cible empêchait toute modélisation, à notre niveau, comme on peut le voir ci-dessous.")
+
+    # Créer les sous-graphiques
+    fig = make_subplots(rows=1, cols=2)
+
+    # Ajouter un Scatter plot
+    i = 1
+    for colonne in ['Global_Sales']:
+        fig.add_trace(
+            go.Scatter(x=vgsales_cleaned_df[colonne], name=colonne),
+            row=1, col=i
+        )
+        i += 1
+
+    i = 2
+    for colonne in ['Global_Sales']:
+        fig.add_trace(
+            go.Histogram(x=vgsales_cleaned_df[colonne], name=colonne),
+            row=1, col=i
+        )
+        i += 1
+
+    fig.update_layout(width=800, height=400)
+
+    # Afficher le graphique dans Streamlit
+    st.plotly_chart(fig)
+
+    ### FIN DE LA PARTIE 2
+
+    ### PARTIE 3
+    ### APPLICATION DE LA METHODE BOX-COX ET VISUALISATION DE LA TRANSFORMATION
+    st.write("### Application de la méthode Box-Cox sur la variable cible")
+    st.write(
+        """Cette méthode est employée car nous n'avons des valeurs strictement positives, autrement il eut fallu utiliser 
+        la méthode Yeo-Johnson qui supporte de telles valeurs.""")
+
+    pt = PowerTransformer(method='box-cox', standardize=False)
+
+    pt.fit(vgsales_cleaned_df[['Global_Sales']])
+
+    vgsales_cleaned_df['Global_Sales_boxed'] = pt.transform(vgsales_cleaned_df[['Global_Sales']])
+
+    only_those = ['Name', 'Global_Sales', 'Global_Sales_boxed']
+    df_only_those = vgsales_cleaned_df[only_those]
+    st.dataframe(df_only_those.head(5))
+
+    fig = make_subplots(
+        rows=1, cols=2
+    )
+
+    i = 1
+    for colonne in ['Global_Sales_boxed']:
+        fig.add_trace(
+            go.Scatter(x=vgsales_cleaned_df[colonne], name=colonne),
+            row=1, col=i
+        )
+        i += 1
+
+    i = 2
+    for colonne in ['Global_Sales_boxed']:
+        fig.add_trace(
+            go.Histogram(x=vgsales_cleaned_df[colonne], name=colonne),
+            row=1, col=2
+        )
+        i += 1
+
+    fig.update_layout(width=800, height=400)
+    st.write(
+        "Nous voyons l'effet de la 'normalisation' de la variable cible plus clairement sur les graphiques ci-dessous.")
+    # Afficher le graphique dans Streamlit
+    st.plotly_chart(fig)
+
+    ### FIN DE LA PARTIE 3
+
+    ### PARTIE 4
+    ### FEATURE ENGINEERING, CREATION DE NOUVELLES VARIABLES
+    st.write("### Feature Engineering à partir des données de base")
+    st.write(
+        "Compte tenu du nombre limité de variables à disposition, nous avons essayé d'en ajouter de nouvelles à partir des existantes.")
+    st.write(
+        "Période d'existence au sein du jeu de données des éditeurs et des plateformes ainsi que des associations potentiellement utiles.")
+
+    ### checkbox pour afficher le code
+    code = '''
+  def assign_longevite(group):
+    plat_long = group.max() - group.min()
+    return plat_long
+
+  df['Game_Sales_Period'] = df.groupby('Platform')['Year'].transform(assign_longevite)
+  df['Publisher_Sales_Period'] = df.groupby('Publisher')['Year'].transform(assign_longevite)
+
+  df['Pub_Plat'] = df['Publisher'] + '_' + df['Platform']
+  df['Pub_Genre'] = df['Publisher'] + '_' + df['Genre']
+  df['Plat_Year'] = df['Platform'] + '_' + df['Year'].astype(str)
+  df['Plat_Genre'] = df['Platform'] + '_' + df['Genre']
+  df['Genre_Year'] = df['Genre'] + '_' + df['Year'].astype(str)
+  '''
+    ### si on checkbox
+    if st.checkbox('Afficher le code'):
+        st.code(code, language="python")
+
+
+    ### Définition de 'durée de vie' pour les Plateformes et les éditeurs
+    def assign_longevite(group):
+        plat_long = group.max() - group.min()
+        return plat_long
+
+
+    vgsales_cleaned_df['Game_Sales_Period'] = vgsales_cleaned_df.groupby('Platform')['Year'].transform(assign_longevite)
+
+
+    def assign_longevite(group):
+        plat_long = group.max() - group.min()
+        return plat_long
+
+
+    vgsales_cleaned_df['Publisher_Sales_Period'] = vgsales_cleaned_df.groupby('Publisher')['Year'].transform(assign_longevite)
+
+    # Création de combinaisons de variables
+    vgsales_cleaned_df['Pub_Plat'] = vgsales_cleaned_df['Publisher'] + '_' + vgsales_cleaned_df['Platform']
+    vgsales_cleaned_df['Pub_Genre'] = vgsales_cleaned_df['Publisher'] + '_' + vgsales_cleaned_df['Genre']
+    vgsales_cleaned_df['Plat_Year'] = vgsales_cleaned_df['Platform'] + '_' + vgsales_cleaned_df['Year'].astype(str)
+    vgsales_cleaned_df['Plat_Genre'] = vgsales_cleaned_df['Platform'] + '_' + vgsales_cleaned_df['Genre']
+    vgsales_cleaned_df['Genre_Year'] = vgsales_cleaned_df['Genre'] + '_' + vgsales_cleaned_df['Year'].astype(str)
+
+    vgsales_cleaned_df['PSP_x_GSP'] = vgsales_cleaned_df['Publisher_Sales_Period'] * vgsales_cleaned_df['Game_Sales_Period']
+
+    st.dataframe(vgsales_cleaned_df.head())
+
 with tab2:
-    st.header("Recherche d'un modèle")
-    st.write("Nous avons entrainé plusieurs modèles afin de déterminer celui qui donne les meilleurs résultats")
 
-    with st.expander("Prévisualisation des attributs et de la cible (Valeurs brutes)", expanded=False, icon=None):
-        nb_lignes = st.select_slider("Nombre de lignes à afficher", range(1, 51), value=5, key='s1')
-        st.write("Attributs:")
-        st.dataframe(feats.head(nb_lignes))
-        st.write("Cible")
-        st.dataframe(target.head(nb_lignes))
-        st.write(f"""Valeur minimum = {target.min()}    
-        Valeur minimum = {target.max()}""")
-        # fig, ax = plt.subplots(figsize=(3, 3))
-        # sm.qqplot(target, fit=True, line='s', ax=ax)
+    ########################################################## CODE POUR LA PAGE 3 ##########
 
-        fig = qq_plot_plotly(target)
-        st.plotly_chart(fig, use_container_width=False)
 
-    cat_col = ['Platform', 'Genre', 'Rate', 'Year', 'Publisher', 'Developer']
-    b_encoder = ce.BinaryEncoder(cols=cat_col, return_df=True)
-    feats = b_encoder.fit_transform(feats)
+    # on passe les Name en minuscules dans df_uvlist et df_no_year
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.lower()
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.lower()
+    # on retire toutes les informations inutiles dans le nom de df_no_year, elles sont entre parenthèses (JP sales), etc.
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.split('(').str[0]
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.split('(').str[0]
 
-    feats['Type'] = feats['Type'].map({'Salon': 1, 'Portable': 0})
+    # On ne conserve que les mots et les espaces dans les Names
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
 
-    X_train, X_test, y_train, y_test = train_test_split(feats, target, test_size=test_size / 100)
+    # on remplace les espaces doubles par des simples
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.replace("  ", " ")
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.replace("  ", " ")
 
-    num_col = ['Critic_score', 'Critic_positive_reviews', 'Critic_mixed_reviews',
-               'Critic_negative_reviews', 'User_score', 'User_positive_reviews',
-               'User_mixed_reviews', 'User_negative_reviews']
-    x_train_scaled = X_train.copy()
-    x_test_scaled = X_test.copy()
-    x_encoders = ["StandardScaler", "RobustScaler", "MinMaxScaler"]
-    scaler_ = st.sidebar.radio(
-        "Encodage des attributs numériques",
-        x_encoders,
-        captions=[],
-    )
-    if scaler_ == "StandardScaler":
-        x_scaler = StandardScaler()
-        x_train_scaled[num_col] = x_scaler.fit_transform(x_train_scaled[num_col])
-        x_test_scaled[num_col] = x_scaler.transform(x_test_scaled[num_col])
-    elif scaler_ == "RobustScaler":
-        x_scaler = RobustScaler()
-        x_train_scaled[num_col] = x_scaler.fit_transform(x_train_scaled[num_col])
-        x_test_scaled[num_col] = x_scaler.transform(x_test_scaled[num_col])
-    elif scaler_ == "MinMaxScaler":
-        x_scaler = MinMaxScaler()
-        x_train_scaled[num_col] = x_scaler.fit_transform(x_train_scaled[num_col])
-        x_test_scaled[num_col] = x_scaler.transform(x_test_scaled[num_col])
+    # on retire tous les espaces en début et fin de Name
+    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.strip()
+    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.strip()
 
-    # y_encoders = ["RobustScaler", "Box-Cox", "Yéo-Johnson", "QuantileTransformer"]
-    y_encoders = ["RobustScaler", "Box-Cox", "QuantileTransformer"]
-    if target_col != 'Global_Sales':
-        y_encoders.remove("Box-Cox")
+    li_salon = ['Wii', 'NES', 'X360', 'PS3', 'PS2', 'SNES', 'PS4', 'N64', 'PS', 'XB', 'PC', '2600', 'XOne', 'GC',
+                'GEN', 'DC', 'SAT', 'SCD', 'NG', 'TG16', '3DO', 'PCFX']
+    li_portable = ['GB', 'DS', 'GBA', '3DS', 'PSP', 'WiiU', 'PSV', 'WS', 'GG']
+    vgsales_cleaned_df['Type'] = np.where(vgsales_cleaned_df['Platform'].isin(li_salon), 'Salon', 'Portable')
+    vgsales_cleaned_df['Year'] = vgsales_cleaned_df['Year'].astype(int)
 
-    scaler_ = st.sidebar.radio(
-        "Encodage de la cible",
-        y_encoders,
-        captions=[],
-    )
-    if scaler_ == "RobustScaler":
-        y_scaler = RobustScaler()
-        y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
-        y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
-    elif scaler_ == "Box-Cox":
-        y_scaler = PowerTransformer(method='box-cox', standardize=True)
-        y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
-        y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
-    elif scaler_ == "Yéo-Johnson":
-        y_scaler = PowerTransformer(method='yeo-johnson', standardize=True)
-        y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
-        y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
-    elif scaler_ == "QuantileTransformer":
-        y_scaler = QuantileTransformer()
-        y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
-        y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
 
-    st.sidebar.button("Rafraichir")
+    ### Définition de 'durée de vie' pour les Plateformes et les éditeurs
+    def assign_longevite(group):
+        plat_long = group.max() - group.min()
+        return plat_long
 
-    with st.expander("Prévisualisation des attributs et de la cible (Valeurs d'entrainement encodées)", expanded=False,
-                     icon=None):
-        nb_lignes = st.select_slider("Nombre de lignes à afficher", range(1, 51), value=5, key='s2')
-        st.write("Attributs:")
-        st.dataframe(x_train_scaled.head(nb_lignes))
-        st.write("Cible")
-        st.dataframe(y_train_scaled[:nb_lignes])
-        st.write(f"""Valeur minimum (train) = {y_train_scaled.min()}    
-                Valeur minimum (train) = {y_train_scaled.max()}""")
-        fig, ax = plt.subplots(figsize=(3, 3))
-        fig = qq_plot_plotly(y_train_scaled)
-        st.plotly_chart(fig, use_container_width=False, key=2)
 
-    model_selection = st.multiselect(
-        "Quels modèles voulez vous évaluer ?",
-        [model for model in models_tried.keys()],
-        [model for model in models_tried.keys()]
-    )
+    vgsales_cleaned_df['Game_Sales_Period'] = vgsales_cleaned_df.groupby('Platform')['Year'].transform(assign_longevite)
 
-    models_to_run = {key: models_tried[key] for key in model_selection}
-    _ = run_models(models_to_run,
-                   x_train_scaled,
-                   x_test_scaled,
-                   y_train_scaled,
-                   y_test_scaled,
-                   y_scaler=y_scaler,
-                   test_size=test_size,
-                   verbose=verbosity,
-                   graph=plot_pred,
-                   plot_shap=plot_shap)
 
-with tab3:
-    tab2_col1, tab2_col2, tab2_col3, tab2_col4 = st.columns(4)
-    with tab2_col1:
-        eta = st.select_slider('eta', np.arange(0.12, 0.15, 0.01), value=0.12)
-    with tab2_col2:
-        max_depth = st.select_slider('max_depth', np.arange(5, 9, 1), value=7)
-    with tab2_col3:
-        subsample = st.select_slider('subsample', np.arange(0.8, 1.1, 0.1), value=0.9)
-    with tab2_col4:
-        n_estimators = st.select_slider('n_estimators', np.arange(100, 1600, 100), value=1000)
-    hyperparameters = {
-        'eta': eta,
-        'max_depth': max_depth,
-        'subsample': subsample,
-        'n_estimators': n_estimators
+    def assign_longevite(group):
+        plat_long = group.max() - group.min()
+        return plat_long
+
+
+    vgsales_cleaned_df['Publisher_Sales_Period'] = vgsales_cleaned_df.groupby('Publisher')['Year'].transform(assign_longevite)
+
+    # Création de combinaisons de variables
+    vgsales_cleaned_df['Pub_Plat'] = vgsales_cleaned_df['Publisher'] + '_' + vgsales_cleaned_df['Platform']
+    vgsales_cleaned_df['Pub_Genre'] = vgsales_cleaned_df['Publisher'] + '_' + vgsales_cleaned_df['Genre']
+    vgsales_cleaned_df['Plat_Year'] = vgsales_cleaned_df['Platform'] + '_' + vgsales_cleaned_df['Year'].astype(str)
+    vgsales_cleaned_df['Plat_Genre'] = vgsales_cleaned_df['Platform'] + '_' + vgsales_cleaned_df['Genre']
+    vgsales_cleaned_df['Genre_Year'] = vgsales_cleaned_df['Genre'] + '_' + vgsales_cleaned_df['Year'].astype(str)
+
+    vgsales_cleaned_df['PSP_x_GSP'] = vgsales_cleaned_df['Publisher_Sales_Period'] * vgsales_cleaned_df['Game_Sales_Period']
+
+    ############################################################################# FIN DU CODE POUR LA PAGE 3 ########################################
+    st.write("### Machine Learning - Données de base")
+    st.write(
+        "Nous allons procéder sur deux jeux de test et d'entrainement, un normalisé par Box-Cox et l'autre non.")
+
+    #### Séparation du jeu de données
+    X_scaled = vgsales_cleaned_df.drop(['Rank', 'NA_Sales',
+                        'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales', 'Year'
+                        ], axis=1)
+    y_scaled = vgsales_cleaned_df['Global_Sales']
+
+    X_non_scaled = vgsales_cleaned_df.drop(['Rank', 'NA_Sales',
+                            'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales', 'Year'
+                            ], axis=1)
+    y_non_scaled = vgsales_cleaned_df['Global_Sales']
+
+    X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled = train_test_split(X_scaled, y_scaled,
+                                                                                    test_size=0.3, random_state=43)
+
+    X_train_non_scaled, X_test_non_scaled, y_train_non_scaled, y_test_non_scaled = train_test_split(X_non_scaled,
+                                                                                                    y_non_scaled,
+                                                                                                    test_size=0.3,
+                                                                                                    random_state=43)
+
+    pt = PowerTransformer(method='box-cox', standardize=False).set_output(transform="pandas")
+
+    y_train_scaled_trans = pt.fit_transform(y_train_scaled.values.reshape(-1, 1))
+    y_test_scaled_trans = pt.transform(y_test_scaled.values.reshape(-1, 1))
+
+    global_sales_lambda = pt.lambdas_[0]
+    afficher_xtrain_scaled = st.checkbox('Afficher X_train et y_train scaled')
+    if afficher_xtrain_scaled:
+        st.write("X_train_scaled")
+        st.dataframe(X_train_scaled.head(2))
+        st.write("y_train_scaled")
+        st.write(y_train_scaled_trans.head(2))
+    afficher_xtrain_non_scaled = st.checkbox('Afficher X_train et y_train non_scaled')
+    if afficher_xtrain_non_scaled:
+        st.write("X_train_non_scaled")
+        st.dataframe(X_train_scaled.head(2))
+        st.write("y_train_non_scaled")
+        st.write(y_train_non_scaled.head(2))
+
+    ### ENCODAGE DES VARIABLES
+    # Target_Encoder - SCALED
+    te_cat = ['Name']
+
+    te = TargetEncoder(categories='auto', target_type='continuous', smooth='auto', cv=5, shuffle=False).set_output(
+        transform="pandas")
+
+    X_train_scaled[te_cat] = te.fit_transform(X_train_scaled[te_cat], y_train_scaled)
+    X_test_scaled[te_cat] = te.transform(X_test_scaled[te_cat])
+
+    ### FREQUENCY ENCODER - SCALED
+    freq_cat = ['Publisher', 'Platform', 'Genre', 'Pub_Plat', 'Plat_Year', 'Plat_Genre', 'Type', 'Pub_Genre',
+                'Genre_Year']
+
+    fr = CountEncoder(normalize=True).set_output(transform="pandas")
+    X_train_scaled_encoded = fr.fit_transform(X_train_scaled[freq_cat])
+    X_test_scaled_encoded = fr.transform(X_test_scaled[freq_cat])
+
+    X_train_scaled = pd.concat([X_train_scaled.drop(freq_cat, axis=1), X_train_scaled_encoded], axis=1)
+    X_test_scaled = pd.concat([X_test_scaled.drop(freq_cat, axis=1), X_test_scaled_encoded], axis=1)
+
+    # Target_Encoder - NON SCALED
+    te_ns_cat = ['Name']
+
+    te_ns = TargetEncoder(categories='auto', target_type='continuous', smooth='auto', cv=5,
+                          shuffle=False).set_output(transform="pandas")
+
+    X_train_non_scaled[te_ns_cat] = te_ns.fit_transform(X_train_non_scaled[te_ns_cat], y_train_non_scaled)
+    X_test_non_scaled[te_ns_cat] = te_ns.transform(X_test_non_scaled[te_ns_cat])
+
+    ### FREQUENCY ENCODER - NON SCALED
+    freq_cat_ns = ['Publisher', 'Platform', 'Genre', 'Pub_Plat', 'Plat_Year', 'Plat_Genre', 'Type', 'Pub_Genre',
+                   'Genre_Year']
+
+    fr_ns = CountEncoder(normalize=True).set_output(transform="pandas")
+    X_train_non_scaled_encoded = fr_ns.fit_transform(X_train_non_scaled[freq_cat_ns])
+    X_test_non_scaled_encoded = fr_ns.transform(X_test_non_scaled[freq_cat_ns])
+
+    X_train_non_scaled = pd.concat([X_train_non_scaled.drop(freq_cat_ns, axis=1), X_train_non_scaled_encoded],
+                                   axis=1)
+    X_test_non_scaled = pd.concat([X_test_non_scaled.drop(freq_cat_ns, axis=1), X_test_non_scaled_encoded], axis=1)
+
+    X_train_scaled['Pub_x_PSP'] = X_train_scaled['Publisher'] * X_train_scaled['Publisher_Sales_Period']
+    X_test_scaled['Pub_x_PSP'] = X_test_scaled['Publisher'] * X_test_scaled['Publisher_Sales_Period']
+
+    X_train_scaled['Plat_x_GSP'] = X_train_scaled['Platform'] * X_train_scaled['Game_Sales_Period']
+    X_test_scaled['Plat_x_GSP'] = X_test_scaled['Platform'] * X_test_scaled['Game_Sales_Period']
+
+    X_train_non_scaled['Pub_x_PSP'] = X_train_non_scaled['Publisher'] * X_train_non_scaled['Publisher_Sales_Period']
+    X_test_non_scaled['Pub_x_PSP'] = X_test_non_scaled['Publisher'] * X_test_non_scaled['Publisher_Sales_Period']
+
+    X_train_non_scaled['Plat_x_GSP'] = X_train_non_scaled['Platform'] * X_train_non_scaled['Game_Sales_Period']
+    X_test_non_scaled['Plat_x_GSP'] = X_test_non_scaled['Platform'] * X_test_non_scaled['Game_Sales_Period']
+
+    ### FEATURE ENGINEERING, CREATION DE NOUVELLES VARIABLES
+    st.write("### Feature Engineering à partir des données de base")
+    st.write(
+        "Compte tenu du nombre limité de variables à disposition, nous avons essayé d'en ajouter de nouvelles à partir des existantes.")
+    st.write("Une fois l'encodage réalisé")
+
+    code = '''
+  X_train_scaled['Pub_x_PSP'] = X_train_scaled['Publisher'] * X_train_scaled['Publisher_Sales_Period']
+  X_test_scaled['Pub_x_PSP'] = X_test_scaled['Publisher'] * X_test_scaled['Publisher_Sales_Period']
+
+  X_train_scaled['Plat_x_GSP'] = X_train_scaled['Platform'] * X_train_scaled['Game_Sales_Period']
+  X_test_scaled['Plat_x_GSP'] = X_test_scaled['Platform'] * X_test_scaled['Game_Sales_Period']
+
+
+  X_train_non_scaled['Pub_x_PSP'] = X_train_non_scaled['Publisher'] * X_train_non_scaled['Publisher_Sales_Period']
+  X_test_non_scaled['Pub_x_PSP'] = X_test_non_scaled['Publisher'] * X_test_non_scaled['Publisher_Sales_Period']
+
+  X_train_non_scaled['Plat_x_GSP'] = X_train_non_scaled['Platform'] * X_train_non_scaled['Game_Sales_Period']
+  X_test_non_scaled['Plat_x_GSP'] = X_test_non_scaled['Platform'] * X_test_non_scaled['Game_Sales_Period']
+  '''
+    ### si on checkbox
+    if  st.checkbox('Afficher le code', key=2):
+        st.code(code, language="python")
+
+    afficher_xtrain_encoded = st.checkbox('Afficher X_train_scaled et X_train_non_scaled encodés')
+    if afficher_xtrain_encoded:
+        st.dataframe(X_train_scaled.head(2))
+        st.dataframe(X_train_non_scaled.head(2))
+
+    scaler = StandardScaler().set_output(transform="pandas")
+    minmaxscaler = MinMaxScaler().set_output(transform="pandas")
+
+    # ### X_scaled
+    X_train_scaled = scaler.fit_transform(X_train_scaled)
+    X_test_scaled = scaler.transform(X_test_scaled)
+
+    ### X_non_scaled
+    X_train_non_scaled = scaler.fit_transform(X_train_non_scaled)
+    X_test_non_scaled = scaler.transform(X_test_non_scaled)
+
+    # Titre de l'application
+    st.title('Modèles Pré-Entraînés')
+    # Dictionnaire des modèles disponibles
+    model_dict = {
+        'RandomForrest scaled': 'Datasets/rf_scaled.joblib',
+        'XGBregressor scaled': 'Datasets/xg_scaled.joblib',
+        'RandomForrest non scaled': 'Datasets/rf_non_scaled.joblib',
+        'XGBregressor non scaled': 'Datasets/xg_non_scaled.joblib',
     }
 
-    model = {'XGBRegressor': XGBRegressor(**hyperparameters)}
+    # Créez une selectbox pour choisir le modèle
+    selected_model_name = st.selectbox('Sélectionnez un modèle', list(model_dict.keys()))
 
-    _ = run_models(model,
-                   x_train_scaled,
-                   x_test_scaled,
-                   y_train_scaled,
-                   y_test_scaled,
-                   y_scaler=y_scaler,
-                   test_size=test_size,
-                   verbose=verbosity, graph=plot_pred, plot_shap=plot_shap)
+    # Chargez le modèle sélectionné
+    selected_model_path = model_dict[selected_model_name]
+    model = joblib.load(selected_model_path)
 
-with tab4:
-    st.title("")
+
+    # Fonction de prédiction utilisant le modèle sélectionné
+    def predict(in_data):
+        return model.predict(in_data)
+
+
+    # Entrée des utilisateurs pour la prédiction
+    if model_dict[selected_model_name] == "rf_scaled.joblib" or model_dict[
+        selected_model_name] == "xg_scaled.joblib":
+        input_data = X_test_scaled
+        input_data_train = X_train_scaled
+
+    if model_dict[selected_model_name] == "rf_non_scaled.joblib" or model_dict[
+        selected_model_name] == "xg_non_scaled.joblib":
+        input_data = X_test_non_scaled
+        input_data_train = X_train_non_scaled
+
+    if st.button('Prédire'):
+        result = predict(input_data)
+        result_train = predict(input_data_train)
+
+        ######################################################## Prédictions et résultats sur le jeu scaled avec RANDOM FORREST
+        if model_dict[selected_model_name] == "rf_scaled.joblib":
+            mse = mean_squared_error(y_test_scaled_trans, result)
+            rmse = mse ** 0.5
+            mae = mean_absolute_error(y_test_scaled_trans, result)
+            r2 = r2_score(y_test_scaled_trans, result)
+            medae = median_absolute_error(y_test_scaled_trans, result)
+
+            mse_t = mean_squared_error(y_train_scaled_trans, result_train)
+            rmse_t = mse_t ** 0.5
+            mae_t = mean_absolute_error(y_train_scaled_trans, result_train)
+            r2_t = r2_score(y_train_scaled_trans, result_train)
+            medae_t = median_absolute_error(y_train_scaled_trans, result_train)
+
+            st.write('Résultat de la prédiction sur test et train:\n\n')
+            st.write('R2 (test):', r2, 'R2 (train):', r2_t, '\n')
+            st.write('MSE (test):', mse, 'MSE (train):', mse_t, '\n')
+            st.write('MAE (test):', mae, 'MAE (train):', mae_t, '\n')
+            st.write('RMSE (test):', rmse, 'RMSE (train):', rmse_t, '\n')
+            st.write('MedAE (test):', medae, 'MedAE (train):', medae_t, '\n')
+
+            st.write('# Valeurs réelles - Valeurs résiduelles:\n\n')
+
+            le_dict = {
+                'Global_Sales': global_sales_lambda
+            }
+            y_pred = inv_boxcox(result, [global_sales_lambda])
+            y_test = inv_boxcox(y_test_scaled_trans, [global_sales_lambda])
+
+            residuals = y_test['x0'] - y_pred
+
+            comparison_df = pd.DataFrame(
+                {'Valeurs Réelles': y_test['x0'], 'Valeurs Prédites': y_pred, 'Residuals': residuals})
+            comparison_df.sort_values(by='Valeurs Réelles', ascending=True, inplace=True)
+
+            # Création de 2 colonnes dans streamlit
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("10 plus petites valeurs réelles")
+                st.dataframe(comparison_df.head(10))
+            with col2:
+                st.write("10 plus grandes valeurs réelles")
+                st.dataframe(comparison_df.tail(10))
+
+            st.dataframe(comparison_df.describe())
+
+            fig = px.scatter(comparison_df, y="Residuals", x="Valeurs Réelles")
+
+            fig.update_layout(width=800, height=400)
+
+            st.plotly_chart(fig)
+
+            st.write('# Valeurs réelles - Valeurs prédites:\n\n')
+            fig = px.scatter(comparison_df, x="Valeurs Réelles", y="Valeurs Prédites")
+
+            fig.update_layout(width=800, height=400)
+
+            st.plotly_chart(fig)
+
+            st.write('# SHAP values:\n\n')
+            shap_values_test = shap.TreeExplainer(model).shap_values(X_test_scaled)
+
+            # X_test_scaled_array = X_test_scaled
+            X_test_scaled_array = X_test_scaled.values
+            plt.figure()
+            shap.summary_plot(shap_values_test, X_test_scaled_array, feature_names=X_test_scaled.columns)
+            st.pyplot(plt)
+
+            st.write('# Matrice de corrélations:\n\n')
+            y_pred = inv_boxcox(result_train, [global_sales_lambda])
+            y_pred = pd.Series(result_train, name='Predictions', index=X_train_scaled.index)
+
+            X_all = pd.concat([X_train_scaled, y_pred], axis=1)
+
+            corr_matrix = X_all.corr()
+            plt.figure(figsize=(12, 12))
+            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+            plt.title('Correlation Matrix of Features')
+            # plt.show()
+            st.pyplot(plt)
+
+            ################################################################## Prédictions et résultats sur le jeu scaled avec XGB
+        if model_dict[selected_model_name] == "xg_scaled.joblib":
+            mse = mean_squared_error(y_test_scaled_trans, result)
+            rmse = mse ** 0.5
+            mae = mean_absolute_error(y_test_scaled_trans, result)
+            r2 = r2_score(y_test_scaled_trans, result)
+            medae = median_absolute_error(y_test_scaled_trans, result)
+
+            mse_t = mean_squared_error(y_train_scaled_trans, result_train)
+            rmse_t = mse_t ** 0.5
+            mae_t = mean_absolute_error(y_train_scaled_trans, result_train)
+            r2_t = r2_score(y_train_scaled_trans, result_train)
+            medae_t = median_absolute_error(y_train_scaled_trans, result_train)
+
+            st.write('Résultat de la prédiction sur test et train:\n\n')
+            st.write('R2 (test):', r2, 'R2 (train):', r2_t, '\n')
+            st.write('MSE (test):', mse, 'MSE (train):', mse_t, '\n')
+            st.write('MAE (test):', mae, 'MAE (train):', mae_t, '\n')
+            st.write('RMSE (test):', rmse, 'RMSE (train):', rmse_t, '\n')
+            st.write('MedAE (test):', medae, 'MedAE (train):', medae_t, '\n')
+            st.write('# Valeurs réelles VS Valeurs résiduelles:\n\n')
+
+            le_dict = {
+                'Global_Sales': global_sales_lambda
+            }
+            y_pred = inv_boxcox(result, [global_sales_lambda])
+            y_test = inv_boxcox(y_test_scaled_trans, [global_sales_lambda])
+
+            residuals = y_test['x0'] - y_pred
+
+            comparison_df = pd.DataFrame(
+                {'Valeurs Réelles': y_test['x0'], 'Valeurs Prédites': y_pred, 'Residuals': residuals})
+            comparison_df.sort_values(by='Valeurs Réelles', ascending=True, inplace=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("10 plus petites valeurs")
+                st.dataframe(comparison_df.head(10))
+            with col2:
+                st.write("10 plus grandes valeurs")
+                st.dataframe(comparison_df.tail(10))
+
+            st.dataframe(comparison_df.describe())
+
+            fig = px.scatter(comparison_df, y="Residuals", x="Valeurs Réelles")
+
+            fig.update_layout(width=800, height=400)
+
+            st.plotly_chart(fig)
+
+            st.write('# Valeurs réelles - Valeurs prédites:\n\n')
+            fig = px.scatter(comparison_df, x="Valeurs Réelles", y="Valeurs Prédites")
+
+            fig.update_layout(width=800, height=400)
+
+            st.plotly_chart(fig)
+
+            st.write('# SHAP values:\n\n')
+            shap_values_test = shap.TreeExplainer(model).shap_values(X_test_scaled)
+
+            X_test_scaled_array = X_test_scaled
+            X_test_scaled_array = X_test_scaled.values
+            plt.figure(figsize=(6, 12))
+            shap.summary_plot(shap_values_test, X_test_scaled_array, feature_names=X_test_scaled.columns,
+                              show=False)
+            st.pyplot(plt)
+
+            st.write('# Matrice de corrélations:\n\n')
+            y_pred = inv_boxcox(result_train, [global_sales_lambda])
+            y_pred = pd.Series(result_train, name='Predictions', index=X_train_scaled.index)
+
+            X_all = pd.concat([X_train_scaled, y_pred], axis=1)
+
+            corr_matrix = X_all.corr()
+            plt.figure(figsize=(12, 12))
+            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+            plt.title('Correlation Matrix of Features')
+            # plt.show()
+            st.pyplot(plt)
+
+            ################################################################ Prédictions et résultats sur le jeu non scaled avec RANDOM FORREST
+        if model_dict[selected_model_name] == "rf_non_scaled.joblib":
+            mse = mean_squared_error(y_test_non_scaled, result)
+            rmse = mse ** 0.5
+            mae = mean_absolute_error(y_test_non_scaled, result)
+            r2 = r2_score(y_test_non_scaled, result)
+            medae = median_absolute_error(y_test_non_scaled, result)
+
+            mse_t = mean_squared_error(y_train_non_scaled, result_train)
+            rmse_t = mse_t ** 0.5
+            mae_t = mean_absolute_error(y_train_non_scaled, result_train)
+            r2_t = r2_score(y_train_non_scaled, result_train)
+            medae_t = median_absolute_error(y_train_non_scaled, result_train)
+
+            st.write('Résultat de la prédiction sur test et train:\n\n')
+            st.write('R2 (test):', r2, 'R2 (train):', r2_t, '\n')
+            st.write('MSE (test):', mse, 'MSE (train):', mse_t, '\n')
+            st.write('MAE (test):', mae, 'MAE (train):', mae_t, '\n')
+            st.write('RMSE (test):', rmse, 'RMSE (train):', rmse_t, '\n')
+            st.write('MedAE (test):', medae, 'MedAE (train):', medae_t, '\n')
+
+            st.write('# Valeurs réelles VS Valeurs résiduelles:\n\n')
+
+            y_pred = result
+            y_test = y_test_non_scaled
+
+            residuals = y_test - y_pred
+
+            comparison_df = pd.DataFrame(
+                {'Valeurs Réelles': y_test, 'Valeurs Prédites': y_pred, 'Residuals': residuals})
+            comparison_df.sort_values(by='Valeurs Réelles', ascending=True, inplace=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("10 plus petites valeurs")
+                st.dataframe(comparison_df.head(10))
+            with col2:
+                st.write("10 plus grandes valeurs")
+                st.dataframe(comparison_df.tail(10))
+
+            st.dataframe(comparison_df.describe())
+
+            fig = px.scatter(comparison_df, y="Residuals", x="Valeurs Réelles")
+
+            fig.update_layout(width=800, height=400)
+
+            st.plotly_chart(fig)
+
+            st.write('# Valeurs réelles - Valeurs prédites:\n\n')
+            fig = px.scatter(comparison_df, x="Valeurs Réelles", y="Valeurs Prédites")
+
+            fig.update_layout(width=800, height=400)
+
+            st.plotly_chart(fig)
+
+            st.write('# SHAP values:\n\n')
+            shap_values_test = shap.TreeExplainer(model).shap_values(X_test_non_scaled)
+
+            X_test_non_scaled_array = X_test_non_scaled
+            X_test_non_scaled_array = X_test_non_scaled.values
+            plt.figure()
+            shap.summary_plot(shap_values_test, X_test_non_scaled_array, feature_names=X_test_non_scaled.columns)
+            st.pyplot(plt)
+
+            st.write('# Matrice de corrélations:\n\n')
+            y_pred = result_train
+            y_pred = pd.Series(result_train, name='Predictions', index=X_train_scaled.index)
+
+            X_all = pd.concat([X_train_scaled, y_pred], axis=1)
+
+            corr_matrix = X_all.corr()
+            plt.figure(figsize=(12, 12))
+            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+            plt.title('Correlation Matrix of Features')
+            # plt.show()
+            st.pyplot(plt)
+
+            #################################################################### Prédictions et résultats sur le jeu non scaled avec XGB
+        if model_dict[selected_model_name] == "xg_non_scaled.joblib":
+            mse = mean_squared_error(y_test_non_scaled, result)
+            rmse = mse ** 0.5
+            mae = mean_absolute_error(y_test_non_scaled, result)
+            r2 = r2_score(y_test_non_scaled, result)
+            medae = median_absolute_error(y_test_non_scaled, result)
+
+            mse_t = mean_squared_error(y_train_non_scaled, result_train)
+            rmse_t = mse_t ** 0.5
+            mae_t = mean_absolute_error(y_train_non_scaled, result_train)
+            r2_t = r2_score(y_train_non_scaled, result_train)
+            medae_t = median_absolute_error(y_train_non_scaled, result_train)
+
+            st.write('Résultat de la prédiction sur test et train:\n\n')
+            st.write('R2 (test):', r2, 'R2 (train):', r2_t, '\n')
+            st.write('MSE (test):', mse, 'MSE (train):', mse_t, '\n')
+            st.write('MAE (test):', mae, 'MAE (train):', mae_t, '\n')
+            st.write('RMSE (test):', rmse, 'RMSE (train):', rmse_t, '\n')
+            st.write('MedAE (test):', medae, 'MedAE (train):', medae_t, '\n')
+
+            st.write('# Valeurs réelles VS Valeurs résiduelles:\n\n')
+
+            y_pred = result
+            y_test = y_test_non_scaled
+
+            residuals = y_test - y_pred
+
+            comparison_df = pd.DataFrame(
+                {'Valeurs Réelles': y_test, 'Valeurs Prédites': y_pred, 'Residuals': residuals})
+            comparison_df.sort_values(by='Valeurs Réelles', ascending=True, inplace=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("10 plus petites valeurs")
+                st.dataframe(comparison_df.head(10))
+            with col2:
+                st.write("10 plus grandes valeurs")
+                st.dataframe(comparison_df.tail(10))
+
+            st.dataframe(comparison_df.describe())
+
+            fig = px.scatter(comparison_df, y="Residuals", x="Valeurs Réelles")
+
+            fig.update_layout(width=800, height=400)
+
+            st.plotly_chart(fig)
+
+            st.write('# Valeurs réelles - Valeurs prédites:\n\n')
+            fig = px.scatter(comparison_df, x="Valeurs Réelles", y="Valeurs Prédites")
+
+            fig.update_layout(width=800, height=400)
+
+            st.plotly_chart(fig)
+
+            st.write('# SHAP values:\n\n')
+            shap_values_test = shap.TreeExplainer(model).shap_values(X_test_non_scaled)
+
+            X_test_non_scaled_array = X_test_non_scaled
+            X_test_non_scaled_array = X_test_non_scaled.values
+            plt.figure()
+            shap.summary_plot(shap_values_test, X_test_non_scaled_array, feature_names=X_test_non_scaled.columns)
+            st.pyplot(plt)
+
+            st.write('# Matrice de corrélations:\n\n')
+            y_pred = result_train
+            y_pred = pd.Series(result_train, name='Predictions', index=X_train_scaled.index)
+
+            X_all = pd.concat([X_train_scaled, y_pred], axis=1)
+
+            corr_matrix = X_all.corr()
+            plt.figure(figsize=(12, 12))
+            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+            plt.title('Correlation Matrix of Features')
+            # plt.show()
+            st.pyplot(plt)
+
+    else:
+        st.write('Veuillez choisir un modèle.')
