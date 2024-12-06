@@ -1,3 +1,10 @@
+import streamlit as st
+
+st.set_page_config(
+    page_title="Conception d'un modèle de Machine Learning des données",
+    layout="wide",
+    menu_items={})
+
 import numpy as np
 import pandas as pd
 import re
@@ -7,7 +14,6 @@ import seaborn as sns
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
-
 import shap
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import PowerTransformer, StandardScaler, MinMaxScaler
@@ -17,12 +23,6 @@ from scipy.special import inv_boxcox
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, median_absolute_error
 
 from Libraries.Data import vgsales_cleaned_df
-
-import streamlit as st
-st.set_page_config(
-    page_title="Conception d'un modèle de Machine Learning des données",
-    layout="wide",
-    menu_items={})
 
 st.markdown("""
         <style>
@@ -38,30 +38,31 @@ st.markdown("""
 st.image("Images/ML.png")
 tab1, tab2 = st.tabs(['Préparation', 'Modélisation'])
 with tab1:
+    df = vgsales_cleaned_df.copy()
     # on passe les Name en minuscules dans df_uvlist et df_no_year
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.lower()
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.lower()
+    df.loc[:, 'Name'] = df['Name'].str.lower()
+    df.loc[:, 'Publisher'] = df['Publisher'].str.lower()
     # on retire toutes les informations inutiles dans le nom de df_no_year, elles sont entre parenthèses (JP sales), etc.
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.split('(').str[0]
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.split('(').str[0]
+    df.loc[:, 'Name'] = df['Name'].str.split('(').str[0]
+    df.loc[:, 'Publisher'] = df['Publisher'].str.split('(').str[0]
 
     # On ne conserve que les mots et les espaces dans les Names
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
+    df.loc[:, 'Name'] = df['Name'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
+    df.loc[:, 'Publisher'] = df['Publisher'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
 
     # on remplace les espaces doubles par des simples
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.replace("  ", " ")
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.replace("  ", " ")
+    df.loc[:, 'Name'] = df['Name'].str.replace("  ", " ")
+    df.loc[:, 'Publisher'] = df['Publisher'].str.replace("  ", " ")
 
     # on retire tous les espaces en début et fin de Name
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.strip()
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.strip()
+    df.loc[:, 'Name'] = df['Name'].str.strip()
+    df.loc[:, 'Publisher'] = df['Publisher'].str.strip()
 
     li_salon = ['Wii', 'NES', 'X360', 'PS3', 'PS2', 'SNES', 'PS4', 'N64', 'PS', 'XB', 'PC', '2600', 'XOne', 'GC', 'GEN',
                 'DC', 'SAT', 'SCD', 'NG', 'TG16', '3DO', 'PCFX']
     li_portable = ['GB', 'DS', 'GBA', '3DS', 'PSP', 'WiiU', 'PSV', 'WS', 'GG']
-    vgsales_cleaned_df['Type'] = np.where(vgsales_cleaned_df['Platform'].isin(li_salon), 'Salon', 'Portable')
-    vgsales_cleaned_df['Year'] = vgsales_cleaned_df['Year'].astype(int)
+    df['Type'] = np.where(df['Platform'].isin(li_salon), 'Salon', 'Portable')
+    df['Year'] = df['Year'].astype(int)
 
     st.write("### Préparation des données")
     st.write(
@@ -79,7 +80,7 @@ with tab1:
     st.code(code)
     ### FIN PARTIE 1
     ### Affichage des premières lignes du df
-    st.dataframe(vgsales_cleaned_df.head())
+    st.dataframe(df.head())
 
     ### PARTIE 2 - étude la répartition de Global_Sales
 
@@ -96,7 +97,7 @@ with tab1:
     i = 1
     for colonne in ['Global_Sales']:
         fig.add_trace(
-            go.Scatter(x=vgsales_cleaned_df[colonne], name=colonne),
+            go.Scatter(x=df[colonne], name=colonne),
             row=1, col=i
         )
         i += 1
@@ -104,7 +105,7 @@ with tab1:
     i = 2
     for colonne in ['Global_Sales']:
         fig.add_trace(
-            go.Histogram(x=vgsales_cleaned_df[colonne], name=colonne),
+            go.Histogram(x=df[colonne], name=colonne),
             row=1, col=i
         )
         i += 1
@@ -125,12 +126,12 @@ with tab1:
 
     pt = PowerTransformer(method='box-cox', standardize=False)
 
-    pt.fit(vgsales_cleaned_df[['Global_Sales']])
+    pt.fit(df[['Global_Sales']])
 
-    vgsales_cleaned_df['Global_Sales_boxed'] = pt.transform(vgsales_cleaned_df[['Global_Sales']])
+    df['Global_Sales_boxed'] = pt.transform(df[['Global_Sales']])
 
     only_those = ['Name', 'Global_Sales', 'Global_Sales_boxed']
-    df_only_those = vgsales_cleaned_df[only_those]
+    df_only_those = df[only_those]
     st.dataframe(df_only_those.head(5))
 
     fig = make_subplots(
@@ -140,7 +141,7 @@ with tab1:
     i = 1
     for colonne in ['Global_Sales_boxed']:
         fig.add_trace(
-            go.Scatter(x=vgsales_cleaned_df[colonne], name=colonne),
+            go.Scatter(x=df[colonne], name=colonne),
             row=1, col=i
         )
         i += 1
@@ -148,7 +149,7 @@ with tab1:
     i = 2
     for colonne in ['Global_Sales_boxed']:
         fig.add_trace(
-            go.Histogram(x=vgsales_cleaned_df[colonne], name=colonne),
+            go.Histogram(x=df[colonne], name=colonne),
             row=1, col=2
         )
         i += 1
@@ -184,8 +185,7 @@ with tab1:
   df['Plat_Genre'] = df['Platform'] + '_' + df['Genre']
   df['Genre_Year'] = df['Genre'] + '_' + df['Year'].astype(str)
   '''
-    ### si on checkbox
-    if st.checkbox('Afficher le code'):
+    with st.expander('Afficher le code'):
         st.code(code, language="python")
 
 
@@ -195,7 +195,7 @@ with tab1:
         return plat_long
 
 
-    vgsales_cleaned_df['Game_Sales_Period'] = vgsales_cleaned_df.groupby('Platform')['Year'].transform(assign_longevite)
+    df['Game_Sales_Period'] = df.groupby('Platform')['Year'].transform(assign_longevite)
 
 
     def assign_longevite(group):
@@ -203,48 +203,48 @@ with tab1:
         return plat_long
 
 
-    vgsales_cleaned_df['Publisher_Sales_Period'] = vgsales_cleaned_df.groupby('Publisher')['Year'].transform(assign_longevite)
+    df['Publisher_Sales_Period'] = df.groupby('Publisher')['Year'].transform(assign_longevite)
 
     # Création de combinaisons de variables
-    vgsales_cleaned_df['Pub_Plat'] = vgsales_cleaned_df['Publisher'] + '_' + vgsales_cleaned_df['Platform']
-    vgsales_cleaned_df['Pub_Genre'] = vgsales_cleaned_df['Publisher'] + '_' + vgsales_cleaned_df['Genre']
-    vgsales_cleaned_df['Plat_Year'] = vgsales_cleaned_df['Platform'] + '_' + vgsales_cleaned_df['Year'].astype(str)
-    vgsales_cleaned_df['Plat_Genre'] = vgsales_cleaned_df['Platform'] + '_' + vgsales_cleaned_df['Genre']
-    vgsales_cleaned_df['Genre_Year'] = vgsales_cleaned_df['Genre'] + '_' + vgsales_cleaned_df['Year'].astype(str)
+    df['Pub_Plat'] = df['Publisher'] + '_' + df['Platform']
+    df['Pub_Genre'] = df['Publisher'] + '_' + df['Genre']
+    df['Plat_Year'] = df['Platform'] + '_' + df['Year'].astype(str)
+    df['Plat_Genre'] = df['Platform'] + '_' + df['Genre']
+    df['Genre_Year'] = df['Genre'] + '_' + df['Year'].astype(str)
 
-    vgsales_cleaned_df['PSP_x_GSP'] = vgsales_cleaned_df['Publisher_Sales_Period'] * vgsales_cleaned_df['Game_Sales_Period']
+    df['PSP_x_GSP'] = df['Publisher_Sales_Period'] * df['Game_Sales_Period']
 
-    st.dataframe(vgsales_cleaned_df.head())
+    st.dataframe(df.head())
 
 with tab2:
 
     ########################################################## CODE POUR LA PAGE 3 ##########
-
+    df = vgsales_cleaned_df.copy()
 
     # on passe les Name en minuscules dans df_uvlist et df_no_year
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.lower()
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.lower()
+    df.loc[:, 'Name'] = df['Name'].str.lower()
+    df.loc[:, 'Publisher'] = df['Publisher'].str.lower()
     # on retire toutes les informations inutiles dans le nom de df_no_year, elles sont entre parenthèses (JP sales), etc.
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.split('(').str[0]
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.split('(').str[0]
+    df.loc[:, 'Name'] = df['Name'].str.split('(').str[0]
+    df.loc[:, 'Publisher'] = df['Publisher'].str.split('(').str[0]
 
     # On ne conserve que les mots et les espaces dans les Names
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
+    df.loc[:, 'Name'] = df['Name'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
+    df.loc[:, 'Publisher'] = df['Publisher'].apply(lambda x: re.sub(r'[^\w\s]', '', x))
 
     # on remplace les espaces doubles par des simples
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.replace("  ", " ")
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.replace("  ", " ")
+    df.loc[:, 'Name'] = df['Name'].str.replace("  ", " ")
+    df.loc[:, 'Publisher'] = df['Publisher'].str.replace("  ", " ")
 
     # on retire tous les espaces en début et fin de Name
-    vgsales_cleaned_df.loc[:, 'Name'] = vgsales_cleaned_df['Name'].str.strip()
-    vgsales_cleaned_df.loc[:, 'Publisher'] = vgsales_cleaned_df['Publisher'].str.strip()
+    df.loc[:, 'Name'] = df['Name'].str.strip()
+    df.loc[:, 'Publisher'] = df['Publisher'].str.strip()
 
     li_salon = ['Wii', 'NES', 'X360', 'PS3', 'PS2', 'SNES', 'PS4', 'N64', 'PS', 'XB', 'PC', '2600', 'XOne', 'GC',
                 'GEN', 'DC', 'SAT', 'SCD', 'NG', 'TG16', '3DO', 'PCFX']
-    li_portable = ['GB', 'DS', 'GBA', '3DS', 'PSP', 'WiiU', 'PSV', 'WS', 'GG']
-    vgsales_cleaned_df['Type'] = np.where(vgsales_cleaned_df['Platform'].isin(li_salon), 'Salon', 'Portable')
-    vgsales_cleaned_df['Year'] = vgsales_cleaned_df['Year'].astype(int)
+    # li_portable = ['GB', 'DS', 'GBA', '3DS', 'PSP', 'WiiU', 'PSV', 'WS', 'GG']
+    df['Type'] = np.where(df['Platform'].isin(li_salon), 'Salon', 'Portable')
+    df['Year'] = df['Year'].astype(int)
 
 
     ### Définition de 'durée de vie' pour les Plateformes et les éditeurs
@@ -253,24 +253,18 @@ with tab2:
         return plat_long
 
 
-    vgsales_cleaned_df['Game_Sales_Period'] = vgsales_cleaned_df.groupby('Platform')['Year'].transform(assign_longevite)
+    df['Game_Sales_Period'] = df.groupby('Platform')['Year'].transform(assign_longevite)
 
-
-    def assign_longevite(group):
-        plat_long = group.max() - group.min()
-        return plat_long
-
-
-    vgsales_cleaned_df['Publisher_Sales_Period'] = vgsales_cleaned_df.groupby('Publisher')['Year'].transform(assign_longevite)
+    df['Publisher_Sales_Period'] = df.groupby('Publisher')['Year'].transform(assign_longevite)
 
     # Création de combinaisons de variables
-    vgsales_cleaned_df['Pub_Plat'] = vgsales_cleaned_df['Publisher'] + '_' + vgsales_cleaned_df['Platform']
-    vgsales_cleaned_df['Pub_Genre'] = vgsales_cleaned_df['Publisher'] + '_' + vgsales_cleaned_df['Genre']
-    vgsales_cleaned_df['Plat_Year'] = vgsales_cleaned_df['Platform'] + '_' + vgsales_cleaned_df['Year'].astype(str)
-    vgsales_cleaned_df['Plat_Genre'] = vgsales_cleaned_df['Platform'] + '_' + vgsales_cleaned_df['Genre']
-    vgsales_cleaned_df['Genre_Year'] = vgsales_cleaned_df['Genre'] + '_' + vgsales_cleaned_df['Year'].astype(str)
+    df['Pub_Plat'] = df['Publisher'] + '_' + df['Platform']
+    df['Pub_Genre'] = df['Publisher'] + '_' + df['Genre']
+    df['Plat_Year'] = df['Platform'] + '_' + df['Year'].astype(str)
+    df['Plat_Genre'] = df['Platform'] + '_' + df['Genre']
+    df['Genre_Year'] = df['Genre'] + '_' + df['Year'].astype(str)
 
-    vgsales_cleaned_df['PSP_x_GSP'] = vgsales_cleaned_df['Publisher_Sales_Period'] * vgsales_cleaned_df['Game_Sales_Period']
+    df['PSP_x_GSP'] = df['Publisher_Sales_Period'] * df['Game_Sales_Period']
 
     ############################################################################# FIN DU CODE POUR LA PAGE 3 ########################################
     st.write("### Machine Learning - Données de base")
@@ -278,15 +272,15 @@ with tab2:
         "Nous allons procéder sur deux jeux de test et d'entrainement, un normalisé par Box-Cox et l'autre non.")
 
     #### Séparation du jeu de données
-    X_scaled = vgsales_cleaned_df.drop(['Rank', 'NA_Sales',
+    X_scaled = df.drop(['Rank', 'NA_Sales',
                         'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales', 'Year'
                         ], axis=1)
-    y_scaled = vgsales_cleaned_df['Global_Sales']
+    y_scaled = df['Global_Sales']
 
-    X_non_scaled = vgsales_cleaned_df.drop(['Rank', 'NA_Sales',
+    X_non_scaled = df.drop(['Rank', 'NA_Sales',
                             'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales', 'Year'
                             ], axis=1)
-    y_non_scaled = vgsales_cleaned_df['Global_Sales']
+    y_non_scaled = df['Global_Sales']
 
     X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled = train_test_split(X_scaled, y_scaled,
                                                                                     test_size=0.3, random_state=43)
@@ -302,14 +296,13 @@ with tab2:
     y_test_scaled_trans = pt.transform(y_test_scaled.values.reshape(-1, 1))
 
     global_sales_lambda = pt.lambdas_[0]
-    afficher_xtrain_scaled = st.checkbox('Afficher X_train et y_train scaled')
-    if afficher_xtrain_scaled:
+    with  st.expander('Afficher X_train et y_train scaled'):
         st.write("X_train_scaled")
         st.dataframe(X_train_scaled.head(2))
         st.write("y_train_scaled")
         st.write(y_train_scaled_trans.head(2))
-    afficher_xtrain_non_scaled = st.checkbox('Afficher X_train et y_train non_scaled')
-    if afficher_xtrain_non_scaled:
+
+    with st.expander('Afficher X_train et y_train non_scaled'):
         st.write("X_train_non_scaled")
         st.dataframe(X_train_scaled.head(2))
         st.write("y_train_non_scaled")
@@ -389,12 +382,10 @@ with tab2:
   X_train_non_scaled['Plat_x_GSP'] = X_train_non_scaled['Platform'] * X_train_non_scaled['Game_Sales_Period']
   X_test_non_scaled['Plat_x_GSP'] = X_test_non_scaled['Platform'] * X_test_non_scaled['Game_Sales_Period']
   '''
-    ### si on checkbox
-    if  st.checkbox('Afficher le code', key=2):
+    with  st.expander('Afficher le code'):
         st.code(code, language="python")
 
-    afficher_xtrain_encoded = st.checkbox('Afficher X_train_scaled et X_train_non_scaled encodés')
-    if afficher_xtrain_encoded:
+    with st.expander('Afficher X_train_scaled et X_train_non_scaled encodés'):
         st.dataframe(X_train_scaled.head(2))
         st.dataframe(X_train_non_scaled.head(2))
 
@@ -433,13 +424,13 @@ with tab2:
 
 
     # Entrée des utilisateurs pour la prédiction
-    if model_dict[selected_model_name] == "rf_scaled.joblib" or model_dict[
-        selected_model_name] == "xg_scaled.joblib":
+    if model_dict[selected_model_name] == "Datasets/rf_scaled.joblib" or model_dict[
+        selected_model_name] == "Datasets/xg_scaled.joblib":
         input_data = X_test_scaled
         input_data_train = X_train_scaled
 
-    if model_dict[selected_model_name] == "rf_non_scaled.joblib" or model_dict[
-        selected_model_name] == "xg_non_scaled.joblib":
+    if model_dict[selected_model_name] == "Datasets/rf_non_scaled.joblib" or model_dict[
+        selected_model_name] == "Datasets/xg_non_scaled.joblib":
         input_data = X_test_non_scaled
         input_data_train = X_train_non_scaled
 
@@ -448,7 +439,7 @@ with tab2:
         result_train = predict(input_data_train)
 
         ######################################################## Prédictions et résultats sur le jeu scaled avec RANDOM FORREST
-        if model_dict[selected_model_name] == "rf_scaled.joblib":
+        if model_dict[selected_model_name] == "Datasets/rf_scaled.joblib":
             mse = mean_squared_error(y_test_scaled_trans, result)
             rmse = mse ** 0.5
             mae = mean_absolute_error(y_test_scaled_trans, result)
@@ -516,7 +507,7 @@ with tab2:
             st.pyplot(plt)
 
             st.write('# Matrice de corrélations:\n\n')
-            y_pred = inv_boxcox(result_train, [global_sales_lambda])
+            # y_pred = inv_boxcox(result_train, [global_sales_lambda])
             y_pred = pd.Series(result_train, name='Predictions', index=X_train_scaled.index)
 
             X_all = pd.concat([X_train_scaled, y_pred], axis=1)
@@ -525,11 +516,10 @@ with tab2:
             plt.figure(figsize=(12, 12))
             sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
             plt.title('Correlation Matrix of Features')
-            # plt.show()
             st.pyplot(plt)
 
             ################################################################## Prédictions et résultats sur le jeu scaled avec XGB
-        if model_dict[selected_model_name] == "xg_scaled.joblib":
+        if model_dict[selected_model_name] == "Datasets/xg_scaled.joblib":
             mse = mean_squared_error(y_test_scaled_trans, result)
             rmse = mse ** 0.5
             mae = mean_absolute_error(y_test_scaled_trans, result)
@@ -588,7 +578,7 @@ with tab2:
             st.write('# SHAP values:\n\n')
             shap_values_test = shap.TreeExplainer(model).shap_values(X_test_scaled)
 
-            X_test_scaled_array = X_test_scaled
+            # X_test_scaled_array = X_test_scaled
             X_test_scaled_array = X_test_scaled.values
             plt.figure(figsize=(6, 12))
             shap.summary_plot(shap_values_test, X_test_scaled_array, feature_names=X_test_scaled.columns,
@@ -596,7 +586,7 @@ with tab2:
             st.pyplot(plt)
 
             st.write('# Matrice de corrélations:\n\n')
-            y_pred = inv_boxcox(result_train, [global_sales_lambda])
+            # y_pred = inv_boxcox(result_train, [global_sales_lambda])
             y_pred = pd.Series(result_train, name='Predictions', index=X_train_scaled.index)
 
             X_all = pd.concat([X_train_scaled, y_pred], axis=1)
@@ -605,11 +595,10 @@ with tab2:
             plt.figure(figsize=(12, 12))
             sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
             plt.title('Correlation Matrix of Features')
-            # plt.show()
             st.pyplot(plt)
 
             ################################################################ Prédictions et résultats sur le jeu non scaled avec RANDOM FORREST
-        if model_dict[selected_model_name] == "rf_non_scaled.joblib":
+        if model_dict[selected_model_name] == "Datasets/rf_non_scaled.joblib":
             mse = mean_squared_error(y_test_non_scaled, result)
             rmse = mse ** 0.5
             mae = mean_absolute_error(y_test_non_scaled, result)
@@ -666,14 +655,14 @@ with tab2:
             st.write('# SHAP values:\n\n')
             shap_values_test = shap.TreeExplainer(model).shap_values(X_test_non_scaled)
 
-            X_test_non_scaled_array = X_test_non_scaled
+            # X_test_non_scaled_array = X_test_non_scaled
             X_test_non_scaled_array = X_test_non_scaled.values
             plt.figure()
             shap.summary_plot(shap_values_test, X_test_non_scaled_array, feature_names=X_test_non_scaled.columns)
             st.pyplot(plt)
 
             st.write('# Matrice de corrélations:\n\n')
-            y_pred = result_train
+            # y_pred = result_train
             y_pred = pd.Series(result_train, name='Predictions', index=X_train_scaled.index)
 
             X_all = pd.concat([X_train_scaled, y_pred], axis=1)
@@ -682,11 +671,10 @@ with tab2:
             plt.figure(figsize=(12, 12))
             sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
             plt.title('Correlation Matrix of Features')
-            # plt.show()
             st.pyplot(plt)
 
             #################################################################### Prédictions et résultats sur le jeu non scaled avec XGB
-        if model_dict[selected_model_name] == "xg_non_scaled.joblib":
+        if model_dict[selected_model_name] == "Datasets/xg_non_scaled.joblib":
             mse = mean_squared_error(y_test_non_scaled, result)
             rmse = mse ** 0.5
             mae = mean_absolute_error(y_test_non_scaled, result)
@@ -743,14 +731,14 @@ with tab2:
             st.write('# SHAP values:\n\n')
             shap_values_test = shap.TreeExplainer(model).shap_values(X_test_non_scaled)
 
-            X_test_non_scaled_array = X_test_non_scaled
+            # X_test_non_scaled_array = X_test_non_scaled
             X_test_non_scaled_array = X_test_non_scaled.values
             plt.figure()
             shap.summary_plot(shap_values_test, X_test_non_scaled_array, feature_names=X_test_non_scaled.columns)
             st.pyplot(plt)
 
             st.write('# Matrice de corrélations:\n\n')
-            y_pred = result_train
+            # y_pred = result_train
             y_pred = pd.Series(result_train, name='Predictions', index=X_train_scaled.index)
 
             X_all = pd.concat([X_train_scaled, y_pred], axis=1)

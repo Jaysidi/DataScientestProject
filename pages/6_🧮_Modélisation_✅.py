@@ -1,3 +1,9 @@
+import streamlit as st
+
+st.set_page_config(
+    page_title="Conception d'un modèle de Machine Learning des données",
+    layout="wide",
+    menu_items={})
 import numpy as np
 import pandas as pd
 import category_encoders as ce
@@ -10,11 +16,7 @@ import plotly.express as px
 from Libraries.Data import vgsales_metacritic_scores_df
 from Libraries.Models import run_models, models_tried, qq_plot_plotly
 
-import streamlit as st
-st.set_page_config(
-    page_title="Conception d'un modèle de Machine Learning des données",
-    layout="wide",
-    menu_items={})
+
 
 st.markdown("""
         <style>
@@ -39,10 +41,10 @@ all_data_preprocessed = (vgsales_metacritic_scores_df.copy().drop(columns=drop_c
 
 st.sidebar.write("***Options***")
 t_r = (all_data_preprocessed[target_col].min(), all_data_preprocessed[target_col].max())
-target_range = st.sidebar.slider("Sélectionnez les ventes min et max",
+target_range = st.sidebar.slider("Sélectionnez les ventes maximum",
                    t_r[0],
                    t_r[1],
-                   t_r)
+                   t_r[1])
 
 test_size = st.sidebar.select_slider("Test size en %", np.arange(10, 35, 5), value=20)
 c1, c2, c3 = st.sidebar.columns(3)
@@ -52,8 +54,7 @@ with c2:
     plot_pred = st.checkbox("Plot", value=True)
 with c3:
     plot_shap = st.checkbox("Shap", value=False)
-all_data_preprocessed = all_data_preprocessed[(all_data_preprocessed[target_col] >= target_range[0])
-                                              & (all_data_preprocessed[target_col] <= target_range[1])]
+all_data_preprocessed = all_data_preprocessed[all_data_preprocessed[target_col] <= target_range]
 feats = all_data_preprocessed.drop(columns=target_col)
 target = all_data_preprocessed[target_col]
 
@@ -61,7 +62,8 @@ target = all_data_preprocessed[target_col]
 tab0, tab1, tab2, tab3, tab4 = st.tabs(["Présentation des données", "Encodage", "Recherche d'un modèle", "XGBoost Regressor", "Analyse de sentiments"], )
 with tab0:
     st.header("Jeu de données utilisé")
-    st.markdown("""Pour la modélisation finale, nous avons travaillé sur le jeu de données enrichi par celles récupérées sur le site Metacritic.  """)
+    st.markdown("""Pour la modélisation finale, nous avons travaillé sur le jeu de données enrichi par celles récupérées sur le site Metacritic.  
+    Nous avons également gardé une colonne rajoutée différenciant les plateformes (console) selon leur type: *Salon* ou *Portable*""")
     st.dataframe(feats.head())
     st.markdown(
         """Pour la cible, nous nous sommes concentrés sur les ventes globales (*Global_Sales*) des jeux""")
@@ -77,12 +79,25 @@ with tab1:
 b_encoder = ce.BinaryEncoder(cols=cat_col, return_df=True)  
 ce.BinaryEncoder(cols=['Genre'], return_df=True).fit_transform(vgsales_metacritic_scores_df).sample(10)[['Genre_0', 'Genre_1', 'Genre_2', 'Genre_3']])""")
     st.markdown(f"""Le ***Binary Encoder*** encode sur n bits chaque catégorie de telle sorte que $2^n < nb.values$.  
-    Pour la variable '*Genre*' cela donne $n=4$ soit $2^4=16$ valeurs possible, pour 11 valeurs uniques à encoder. Nous avons donc 4 colonnes au lieur de 10.""")
+    Pour la variable '*Genre*' cela donne $n=4$ soit $2^4=16$ valeurs possible, pour {nunique.at['Genre', 'Valeur unique']} 
+    valeurs uniques à encoder. Nous avons donc 4 colonnes au lieur de {nunique.at['Genre', 'Valeur unique']-1}.""")
     st.dataframe(ce.BinaryEncoder(cols=['Genre'], return_df=True).fit_transform(vgsales_metacritic_scores_df).sample(10)[['Genre_0', 'Genre_1', 'Genre_2', 'Genre_3']])
     st.caption("Sur un échantillon de 10 lignes au hasard")
-    st.markdown("""La différence est encore plus notable avec la variable *Developer* et ses 1006 valeurs uniques -> $n=10$,  soit $2^{10}=1024 > 1006$.  
-    10 colonnes au lieu de 1005 !
-    """)
+    st.markdown(f"""La différence est encore plus notable avec la variable *Developer* et ses {nunique.at['Developer', 'Valeur unique']}
+     valeurs uniques -> $n=10$,  soit $2^{10}=1024 > {nunique.at['Developer', 'Valeur unique']}$.  
+    10 colonnes au lieu de {nunique.at['Developer', 'Valeur unique']-1} !  
+    
+    La variable *Type* a été encodé en binaire:""")
+    st.code("feats['Type'] = feats['Type'].map({'Salon': 1, 'Portable': 0})")
+
+    st.markdown("""Enfin, la cible (Global_Sales dans notre cas), a d'abord été mis à plusieurs échelles avec différents *scaler*:  
+* StandardScaler
+* RobustScaler
+* MinMaxScaler
+mais les résultats étaient très instables en fonction du jeu d'entrainement.
+La distribution n'étant pas '*normale*', nous avons étudié différentes possibilités pour retenir la transformation 
+PowerTransform de type Box_Cox qui tente de '*normaliser*' les valeurs""")
+
 with tab2:
     st.header("Recherche d'un modèle")
     st.write("Nous avons entrainé plusieurs modèles afin de déterminer celui qui donne les meilleurs résultats")
@@ -233,20 +248,20 @@ with tab4:
                 "nous avons commencé une analyse de sentiment")
     st.page_link("pages/4_🌐_Web_scraping.py", label="Cliquer ici pour accéder à la page WebScraping")
 
-    st.markdown("""Pour entrainé un modèle, nous avons filtré le jeu de données pour ne garder que les jeux récoltés 
+    st.markdown("""Pour entrainer un modèle, nous avons filtré le jeu de données pour ne garder que les jeux récoltés 
     avec 500 commentaires.  
     Ensuite, à l'aide de la fonction *detect* de la librairie *langdetect* nous n'avons gardé que les commentaires en 
     anglais (majoritaires).""")
     st.code("""from langdetect import detect  
-    data['Is_English'] = data['Quote'].apply(detect_english)
-    data = data.loc[data.Is_English]""")
+data['Is_English'] = data['Quote'].apply(detect_english)
+data = data.loc[data.Is_English]""")
 
     st.markdown("""Ensuite, nous avons créer la variable cible, sur base de la métrique utilisé par Metacritic:""")
     st.image("Images/metacritic_metric.png")
     st.code("""# Encode the target column Sentiment based on Metacritic ranges: 0-4 = Negative, 5-7 = Mixed, 8-10 = Positive  
 data['Sentiment'] = data['Score'].apply(lambda x: -1 if x < 5 else 0 if x >= 5  and x < 8 else 1)""")
     st.markdown("""Ensuite, comment le nettoyage du texte des caractères inutiles ainsi que des stop words""")
-    st.code("""# Set quotes to lower case and remove all non alpha numeric
+    st.code(r"""# Set quotes to lower case and remove all non alpha numeric
 # or not white space characters with an empty string
 data['Quote'] = data['Quote'].str.lower().replace('[^\w\s]','', regex=True)
 data["Quote"] = data["Quote"].apply(word_tokenize)
@@ -286,13 +301,16 @@ X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
 
     st.markdown(f"""Nous avons testé un modèle GradientBoostingClassifier avec les paramètres par défaut avec
 {round(155392*0.85)} commentaires""")
-    conf_mat = [[4619, 132, 2471], [610, 274, 1628], [471, 76, 13028]]
-    conf_mat_resampled = [[5632, 847, 743], [725, 1096, 691], [1885, 1408, 10282]]
+    # conf_mat = [[4619, 132, 2471], [610, 274, 1628], [471, 76, 13028]]
+    # conf_mat_resampled = [[5632, 847, 743], [725, 1096, 691], [1885, 1408, 10282]]
+    conf_mat = [[0.63957353, 0.01827749, 0.34214899], [0.24283439, 0.10907643, 0.64808917], [0.03469613, 0.00559853, 0.95970534]]
+    conf_mat_resampled = [[0.77983938, 0.11728053, 0.10288009], [0.28861465, 0.43630573, 0.27507962], [0.1388582,  0.10372007, 0.75742173]]
+
 
     labels = ['Class -1', 'Class 0', 'Class 1']
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("""#### Résultat du modèle entrainé avec les données brutes:  
+        st.markdown("""#### Résultats du modèle entrainé avec les données brutes:  
 ##### Classification report""")
         st.image("Images/class_report.png")
         st.write("""##### Confusion Matrix""")

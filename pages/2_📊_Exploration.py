@@ -1,13 +1,14 @@
-import uuid
-import plotly.express as px
-from Libraries.Data import uvl_df, vgsales_original_df, metacritic_scores_df, vgsales_cleaned_df, vgsales_new_df
-
 import streamlit as st
+
 st.set_page_config(
     page_title="Exploration des données",
     layout="wide",
     menu_items={}
 )
+
+import uuid
+import plotly.express as px
+from Libraries.Data import uvl_df, vgsales_original_df, metacritic_scores_df, vgsales_cleaned_df, vgsales_new_df
 
 st.markdown("""
         <style>
@@ -32,10 +33,10 @@ with st.expander('Afficher les premières lignes du jeu de données original'):
     st.dataframe(vgsales_original_df.head(10))
 
 na_summary = vgsales_original_df.isna().sum()[vgsales_original_df.isna().sum() != 0].reset_index()
-na_summary['%'] = round(na_summary[0] / len(vgsales_cleaned_df) * 100, 2)
+na_summary['%'] = round(na_summary[0] / len(vgsales_original_df) * 100, 2)
 na_summary.columns = ['Variable', '# NaN', '% total']
 
-st.markdown("""### Constations
+st.markdown("""### Constatations
 
 * Valeurs manquantes pour la variable Year (271) et Publisher (58)
 
@@ -54,7 +55,7 @@ with st.expander('Afficher les lignes en question'):
 
 st.write("### Remplacement des données manquantes ou inconnues des variables Year et Publisher")
 st.page_link("pages/4_🌐_Web_scraping.py", label="Cliquer ici pour accéder à la page WebScraping")
-st.markdown("""Nous avons utilisé les données récupérées par Web Scrapping sur différents site web.
+st.markdown("""Nous avons utilisé les données récupérées par Web Scrapping sur différents sites web.
 Les données ont été récupérées et exportées dans des fichiers *.csv. Afin de pouvoir compléter les 
 informations du jeu de données original, nous avons liés les différents jeux de données sur les couple Name/Platform.
 Les noms ont été préalablement nettoyés et standardisés afin d'optimiser le nombre de correspondances.""")
@@ -221,7 +222,7 @@ st.dataframe(df_last_miss)
 
 st.write("Enfin, certains doublons sont écartés en ne conservait que ceux présentant le plus de ventes globales")
 st.image("Images/last_duplicates.png")
-st.write("* Suppression des 60 lignes dont la correspondance n'a pu être faîte malgré la somme d'informations récupérée.")
+st.write("* Suppression des 60 lignes dont la correspondance n'a pu être faîte malgré la somme d'informations récupérées.")
 
 if st.checkbox('Afficher les données nettoyées'):
     st.text(f"Fichier complété : {vgsales_cleaned_df.shape[0]} lignes conservées sur les {vgsales_original_df.shape[0]} lignes de départ.")
