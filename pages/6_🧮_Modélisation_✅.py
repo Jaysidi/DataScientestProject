@@ -184,7 +184,7 @@ with tab2:
     )
 
     models_to_run = {key: models_tried[key] for key in model_selection}
-    with st.spinner(f"Running model(s): "):
+    with st.spinner(f"Running model(s): {', '.join([mod for mod in models_tried])}"):
         _ = run_models(models_to_run,
                        x_train_scaled,
                        x_test_scaled,
@@ -215,7 +215,7 @@ with tab3:
     }
 
     model = {'XGBRegressor': XGBRegressor(**hyperparameters)}
-    with st.spinner(f"Running model(s): "):
+    with st.spinner(f"Running model XGBRegressor with param = {hyperparameters}"):
         _ = run_models(model,
                        x_train_scaled,
                        x_test_scaled,
