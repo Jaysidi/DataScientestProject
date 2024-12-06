@@ -159,9 +159,8 @@ def run_models(models, x_train, x_test, y_train, y_test, y_scaler, test_size, ve
 
     results['y_range'] = y_range
     if verbose:
-        st.markdown(f"#### ⚠️ **Les métriques sont calculées sur les valeurs brutes: "
+        st.caption(f"###### ⚠️ **Les métriques sont calculées sur les valeurs brutes: "
                     f"{str(y_range_reverted[0])} -> {str(y_range_reverted[1])} million(s) de ventes**")
-
     for model_name, model in models.items():
         # model.fit(x_train, y_train)
         with st.spinner(f"Fitting {model_name}..."):

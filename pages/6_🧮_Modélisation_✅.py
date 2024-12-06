@@ -115,20 +115,20 @@ with tab2:
     x_train_scaled = X_train.copy()
     x_test_scaled = X_test.copy()
     x_encoders = ["StandardScaler", "RobustScaler", "MinMaxScaler"]
-    scaler_ = st.sidebar.radio(
-        "Encodage des attributs numériques",
+    scaler_x = st.sidebar.radio(
+        "Encodage des variables numériques",
         x_encoders,
         captions=[],
     )
-    if scaler_ == "StandardScaler":
+    if scaler_x == "StandardScaler":
         x_scaler = StandardScaler()
         x_train_scaled[num_col] = x_scaler.fit_transform(x_train_scaled[num_col])
         x_test_scaled[num_col] = x_scaler.transform(x_test_scaled[num_col])
-    elif scaler_ == "RobustScaler":
+    elif scaler_x == "RobustScaler":
         x_scaler = RobustScaler()
         x_train_scaled[num_col] = x_scaler.fit_transform(x_train_scaled[num_col])
         x_test_scaled[num_col] = x_scaler.transform(x_test_scaled[num_col])
-    elif scaler_ == "MinMaxScaler":
+    elif scaler_x == "MinMaxScaler":
         x_scaler = MinMaxScaler()
         x_train_scaled[num_col] = x_scaler.fit_transform(x_train_scaled[num_col])
         x_test_scaled[num_col] = x_scaler.transform(x_test_scaled[num_col])
@@ -138,31 +138,31 @@ with tab2:
     if target_col != 'Global_Sales':
         y_encoders.remove("Box-Cox")
 
-    scaler_ = st.sidebar.radio(
+    scaler_y = st.sidebar.radio(
         "Encodage de la cible",
         y_encoders,
         captions=[],
     )
-    if scaler_ == "Box-Cox":
+    if scaler_y == "Box-Cox":
         standard = st.sidebar.checkbox("Standard BC", value=False)
-    if scaler_ == "RobustScaler":
+    if scaler_y == "RobustScaler":
         y_scaler = RobustScaler()
         y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
         y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
-    elif scaler_ == "Box-Cox":
+    elif scaler_y == "Box-Cox":
         y_scaler = PowerTransformer(method='box-cox', standardize=standard)
         y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
         y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
-    elif scaler_ == "Yéo-Johnson":
+    elif scaler_y == "Yéo-Johnson":
         y_scaler = PowerTransformer(method='yeo-johnson', standardize=False)
         y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
         y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
-    elif scaler_ == "QuantileTransformer":
+    elif scaler_y == "QuantileTransformer":
         y_scaler = QuantileTransformer()
         y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
         y_test_scaled = y_scaler.transform(y_test.values.reshape(-1, 1)).ravel()
 
-    st.sidebar.button("Rafraichir")
+    st.sidebar.button("Rafraichir", type="primary")
 
     with st.expander("Prévisualisation des attributs et de la cible (Valeurs d'entrainement encodées)", expanded=False,
                      icon=None):
@@ -179,22 +179,24 @@ with tab2:
     model_selection = st.multiselect(
         "Quels modèles voulez vous évaluer ?",
         [model for model in models_tried.keys()],
-        []
-        # [model for model in models_tried.keys()]
+        # []
+        [model for model in models_tried.keys()]
     )
-
-    models_to_run = {key: models_tried[key] for key in model_selection}
-    with st.spinner(f"Running model(s): {', '.join([mod for mod in models_tried])}"):
-        _ = run_models(models_to_run,
-                       x_train_scaled,
-                       x_test_scaled,
-                       y_train_scaled,
-                       y_test_scaled,
-                       y_scaler=y_scaler,
-                       test_size=test_size,
-                       verbose=verbosity,
-                       graph=plot_pred,
-                       plot_shap=plot_shap)
+    if st.button("Lancer la modélisation", type="primary"):
+        models_to_run = {key: models_tried[key] for key in model_selection}
+        st.caption(f"""Type d'encodage des variables numériques: {scaler_x} -- 
+        Type d'encodage de la variable cible: {scaler_y} -- Test split: {test_size}%""")
+        with st.spinner(f"Running model(s): {', '.join([mod for mod in model_selection])}"):
+            _ = run_models(models_to_run,
+                           x_train_scaled,
+                           x_test_scaled,
+                           y_train_scaled,
+                           y_test_scaled,
+                           y_scaler=y_scaler,
+                           test_size=test_size,
+                           verbose=verbosity,
+                           graph=plot_pred,
+                           plot_shap=plot_shap)
 
 with tab3:
     tab2_col1, tab2_col2, tab2_col3, tab2_col4 = st.columns(4)
@@ -205,7 +207,7 @@ with tab3:
     with tab2_col3:
         subsample = st.select_slider('subsample', np.arange(0.8, 1.01, 0.1), value=0.9)
     with tab2_col4:
-        n_estimators = st.select_slider('n_estimators', np.arange(100, 1600, 100), value=1000)
+        n_estimators = st.select_slider('n_estimators', np.arange(100, 1600, 100), value=100)
 
     hyperparameters = {
         'eta': eta,
