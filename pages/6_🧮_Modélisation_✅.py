@@ -430,7 +430,7 @@ Sur cette base enfin, nous allons prédire les ventes globales.
 
 
     # ran_stat = np.random.random_integers(1, 100)
-    ran_stat = 78
+    ran_stat = 39
     test_s = 0.25
     # st.write(ran_stat)
     # Préparation des données avec les sentiments
