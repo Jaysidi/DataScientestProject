@@ -29,7 +29,7 @@ Il est composé de 3 types de données:
 * 1 colonne de type int (Rank)
 * 4 colonnes de type object (Name, Platform, Genre et Publisher)""")
 
-with st.expander('Afficher les premières lignes du jeu de données original'):
+with st.expander('Afficher les premières lignes du jeu de données original', expanded=True):
     st.dataframe(vgsales_original_df.head(10))
 
 na_summary = vgsales_original_df.isna().sum()[vgsales_original_df.isna().sum() != 0].reset_index()
@@ -44,7 +44,7 @@ st.markdown("""### Constatations
 st.dataframe(na_summary)
 st.markdown("""
 
-* Valeurs 'Unknown' (203) pour Publisher""")
+* Valeurs = 'Unknown' pour Publisher (203)""")
 
 
 with st.expander('Afficher les lignes en question'):
@@ -224,6 +224,6 @@ st.write("Enfin, certains doublons sont écartés en ne conservait que ceux pré
 st.image("Images/last_duplicates.png")
 st.write("* Suppression des 60 lignes dont la correspondance n'a pu être faîte malgré la somme d'informations récupérées.")
 
-if st.checkbox('Afficher les données nettoyées'):
+if st.checkbox('Afficher les données nettoyées', value=True):
     st.text(f"Fichier complété : {vgsales_cleaned_df.shape[0]} lignes conservées sur les {vgsales_original_df.shape[0]} lignes de départ.")
     st.dataframe(vgsales_cleaned_df.head(50))

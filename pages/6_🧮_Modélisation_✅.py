@@ -1,9 +1,12 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Conception d'un modèle de Machine Learning des données",
+    page_title="Données enrichies: Conception d'un modèle de Machine Learning",
     layout="wide",
     menu_items={})
+
+import uuid
+import re
 import numpy as np
 import pandas as pd
 import category_encoders as ce
@@ -13,10 +16,9 @@ from sklearn.preprocessing import MinMaxScaler, RobustScaler, PowerTransformer, 
 from xgboost import XGBRegressor
 
 import plotly.express as px
-from Libraries.Data import vgsales_metacritic_scores_df
+
+from Libraries.Data import vgsales_metacritic_scores_df, data_sentiment_100_500_df
 from Libraries.Models import run_models, models_tried, qq_plot_plotly
-
-
 
 st.markdown("""
         <style>
@@ -50,6 +52,7 @@ if not pretrained:
                                    t_r[1])
     test_size = st.sidebar.select_slider("Test size en %", np.arange(10, 35, 5), value=20)
     all_data_preprocessed = all_data_preprocessed[all_data_preprocessed[target_col] <= target_max]
+    param_name += f"ts{test_size}_tm{t_r[1]}"
 else:
     test_size = 25
     param_name += f"ts25_tm{t_r[1]}"
@@ -68,12 +71,12 @@ target = all_data_preprocessed[target_col]
 tab0, tab1, tab2, tab3, tab4 = st.tabs(["Présentation des données", "Encodage", "Recherche d'un modèle", "XGBoost Regressor", "Analyse de sentiments"], )
 with tab0:
     st.header("Jeu de données utilisé")
-    st.markdown("""Pour la modélisation finale, nous avons travaillé sur le jeu de données enrichi par celles récupérées sur le site Metacritic.  
-    Nous avons également gardé une colonne rajoutée différenciant les plateformes (console) selon leur type: *Salon* ou *Portable*""")
+    st.markdown("""Pour la modélisation finale, nous avons travaillé sur le jeu de données **enrichi** par celles récupérées sur le site *Metacritic*.  
+    Nous avons également concervé la colonne distinguant les plateformes (consoles) selon leur type: *Salon* ou *Portable*""")
     st.dataframe(feats.head())
     st.markdown(
         """Pour la cible, nous nous sommes concentrés sur les ventes globales (*Global_Sales*) des jeux""")
-
+    st.dataframe(target.head())
 with tab1:
     st.header("Préparation des données <-> Encodage des variables")
     nunique = pd.DataFrame(vgsales_metacritic_scores_df[['Platform', 'Year', 'Genre', 'Publisher', 'Rate', 'Developer', 'Type']].nunique())
@@ -93,16 +96,32 @@ ce.BinaryEncoder(cols=['Genre'], return_df=True).fit_transform(vgsales_metacriti
      valeurs uniques -> $n=10$,  soit $2^{10}=1024 > {nunique.at['Developer', 'Valeur unique']}$.  
     10 colonnes au lieu de {nunique.at['Developer', 'Valeur unique']-1} !  
     
-    La variable *Type* a été encodé en binaire:""")
+La variable *Type* a été encodée en binaire:""")
     st.code("feats['Type'] = feats['Type'].map({'Salon': 1, 'Portable': 0})")
 
     st.markdown("""Enfin, la cible (Global_Sales dans notre cas), a d'abord été mis à plusieurs échelles avec différents *scaler*:  
 * StandardScaler
 * RobustScaler
 * MinMaxScaler
-mais les résultats étaient très instables en fonction du jeu d'entrainement.
-La distribution n'étant pas '*normale*', nous avons étudié différentes possibilités pour retenir la transformation 
-PowerTransform de type Box_Cox qui tente de '*normaliser*' les valeurs""")
+
+mais les résultats étaient **très instables** en fonction du jeu d'entrainement.  
+
+La distribution n'étant pas '*normale*', nous avons étudié différentes méthodes, pour finalement retenir la transformation 
+PowerTransform de type Box_Cox qui tente de '*normaliser*' les valeurs, les modèles étant plus performants avec une 
+répartition de ce type.""")
+    with st.expander("Effet de la transformation sur la répartition (QQ plot)"):
+        tab1_col1, tab1_col2 = st.columns(2)
+        with tab1_col1:
+            st.write("##### Valeurs cibles 'brutes'")
+            fig = qq_plot_plotly(target)
+            st.plotly_chart(fig, use_container_width=False, key=uuid.uuid4())
+
+        with tab1_col2:
+            st.write("##### Valeurs cibles 'Transformées' par la méthode *Box-Cox*")
+            pt_ex = PowerTransformer(method='box-cox', standardize=False)
+
+            fig1 = qq_plot_plotly(pt_ex.fit_transform(target.values.reshape(-1, 1)).ravel())
+            st.plotly_chart(fig1, use_container_width=False, key=uuid.uuid4())
 
 with tab2:
     st.header("Recherche d'un modèle")
@@ -140,6 +159,7 @@ with tab2:
                'User_mixed_reviews', 'User_negative_reviews']
     x_train_scaled = X_train.copy()
     x_test_scaled = X_test.copy()
+    x_encoder_map = {"RobustScaler": "RSc", "StandardScaler": "SSc", "MinMaxScaler": "MMS"}
     if not pretrained:
         x_encoders = ["StandardScaler", "RobustScaler", "MinMaxScaler"]
         scaler_x = st.sidebar.radio(
@@ -149,7 +169,8 @@ with tab2:
         )
     else:
         scaler_x = "MinMaxScaler"
-        param_name += f"_xMMS"
+
+    param_name += f"_x{x_encoder_map[scaler_x]}"
 
     if scaler_x == "StandardScaler":
         x_scaler = StandardScaler()
@@ -179,10 +200,11 @@ with tab2:
         captions=[],
     )
     param_name += f"_y{y_encoder_map[scaler_y]}"
-    if (scaler_y == "Box-Cox" or scaler_y == "Yéo-Johnson") and not pretrained:
-        standard = st.sidebar.checkbox("Standardize BC/YJ", value=False)
-    else:
-        standard = False
+    # if (scaler_y == "Box-Cox" or scaler_y == "Yéo-Johnson") and not pretrained:
+    #     standard = st.sidebar.checkbox("Standardize BC/YJ", value=False)
+    # else:
+    #     standard = False
+    standard = False
     if scaler_y == "RobustScaler":
         y_scaler = RobustScaler()
         y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).ravel()
@@ -238,13 +260,15 @@ with tab2:
                            param_name=param_name)
 
 with tab3:
+    st.markdown(f"""Le modèle XGBRegressor retenu, nous avons effectué une recherche randomisée (RandomizedSearchCV) 
+    sur certains hyper-paramètres du modèle pour tenter de minimiser l'overfitting.""")
     tab2_col1, tab2_col2, tab2_col3, tab2_col4 = st.columns(4)
     with tab2_col1:
-        eta = st.select_slider('eta', np.arange(0.12, 0.15, 0.01), value=0.12)
+        eta = st.select_slider('eta', np.arange(0.12, 0.15, 0.01), value=0.13   )
     with tab2_col2:
-        max_depth = st.select_slider('max_depth', np.arange(5, 9, 1), value=7)
+        max_depth = st.select_slider('max_depth', np.arange(5, 9, 1), value=6)
     with tab2_col3:
-        subsample = st.select_slider('subsample', np.arange(0.8, 1.01, 0.1), value=0.9)
+        subsample = st.select_slider('subsample', np.arange(0.8, 1.01, 0.1), value=1)
     with tab2_col4:
         if not pretrained:
             n_estimators = st.select_slider('n_estimators', np.arange(100, 1600, 100), value=100)
@@ -321,11 +345,11 @@ X_test = vec.transform(X_test)""")
     st.code("""smt = SMOTETomek(sampling_strategy='all')
 X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
 """)
-    col1, col2 = st.columns(2)
-    with col1:
+    tab4_col1, tab4_col2 = st.columns(2)
+    with tab4_col1:
         st.write("#### Données brutes")
         st.image("Images/count_unbalanced.png")
-    with col2:
+    with tab4_col2:
         st.write("#### Données *re-sampled*")
         st.image("Images/count_balanced.png")
 
@@ -338,8 +362,8 @@ X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
 
 
     labels = ['Class -1', 'Class 0', 'Class 1']
-    col1, col2 = st.columns(2)
-    with col1:
+    tab4_col3, tab4_col4 = st.columns(2)
+    with tab4_col3:
         st.markdown("""#### Résultats du modèle entrainé avec les données brutes:  
 ##### Classification report""")
         st.image("Images/class_report.png")
@@ -350,7 +374,7 @@ X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
                          y=labels,
                          text_auto=True, color_continuous_scale = "GnBu")
         st.plotly_chart(fig1)
-    with col2:
+    with tab4_col4:
         st.markdown("""#### Résultat du modèle entrainé avec les données rééquilibrées par SMOTETomek:    
 ##### Classification report""")
         st.image("Images/class_report_resampled.png")
@@ -361,3 +385,121 @@ X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
                          y=labels,
                          text_auto=True, color_continuous_scale = "GnBu")
         st.plotly_chart(fig2)
+    st.header("Prédiction des ventes avec l'analyse de sentiments")
+    vege_meta = vgsales_metacritic_scores_df.copy()[['Name','Year', 'Platform', 'Genre', 'Publisher', 'Developer', 'Rate', 'Type', 'Global_Sales']]
+
+    st.markdown(f"""Prédiction des ventes d'un jeu avec comme arguments qualitatifs précis:  
+* Le '***Publisher***'
+* Le année de sortie '***Year***'
+* La '***Platform***'
+* Le '***Genre***'
+* Le '***Developer***'
+* Son rating '***Rate***'
+* Le type ***'Type'*** de plateforme""")
+    st.dataframe(vege_meta.sample(5))
+    st.markdown("""
+-> Le tout enrichi par les ***commentaires d'utilisateurs*** du jeu.
+
+Pour ces derniers, la modélisation ci dessus nous a permis de déduire, pour chaque commentaire, s'il s'agit d'un commentaire 
+positif, négatif ou encore mitigé. En faisant le comptage par *label* de sentiment, nous parvenons alors à enrichir les 
+donnés avec 3 variables qualitatives:  
+* 'User_npositive_reviews_predicted', 
+* 'User_mixed_reviews_predicted', 
+* 'User_negative_reviews_predicted'.""")
+    st.dataframe(data_sentiment_100_500_df.sample(5))
+    st.markdown("""
+Sur cette base enfin, nous allons prédire les ventes globales.
+""")
+    st.caption("Les jeux utilisés ici pour entrainer et tester le modèle, sont les jeux disposants entre 100 et 500 "
+                "commentaires")
+    vege_meta['Clean_name'] = vege_meta['Name'].str.lower().apply(
+        lambda x: re.sub(r'\W+', '', re.sub(r'\(.+\)', '', x)))
+    data_sentiment_100_500_df['Clean_name'] = data_sentiment_100_500_df['Name'].str.lower().apply(
+        lambda x: re.sub(r'\W+', '', re.sub(r'\(.+\)', '', x)))
+    all_data_real = vege_meta.merge(data_sentiment_100_500_df,
+                                     right_on=['Clean_name', 'Platform'],
+                                     left_on=['Clean_name', 'Platform']).drop(columns=['Clean_name', 'Name_y', 'Name_x'])
+    data_sentiment_100_500_df.drop(columns='Clean_name', inplace=True)
+    min_max_num_col = ['User_negative_reviews_predicted',
+                       'User_mixed_reviews_predicted',
+                       'User_positive_reviews_predicted']
+
+    all_data_real_no_sent = all_data_real.copy().drop(columns=min_max_num_col)
+
+    cat_col = ['Platform', 'Genre', 'Rate', 'Year', 'Publisher', 'Developer']
+
+
+    # ran_stat = np.random.random_integers(1, 100)
+    ran_stat = 78
+    test_s = 0.25
+    # st.write(ran_stat)
+    # Préparation des données avec les sentiments
+
+    feats_s = all_data_real.drop(columns=['Global_Sales'])
+    target_s = all_data_real['Global_Sales']
+
+    encoder_s = ce.BinaryEncoder(cols=cat_col,return_df=True)
+    feats_s = encoder_s.fit_transform(feats_s)
+    feats_s['Type'] = feats_s['Type'].map({'Salon': 1, 'Portable': 0})
+
+    X_train_s, X_test_s, y_train_s, y_test_s = train_test_split(feats_s,
+                                                                target_s,
+                                                                test_size=test_s,
+                                                                random_state=ran_stat)
+
+    X_train_s_Scaled = X_train_s.copy()
+    X_test_s_Scaled = X_test_s.copy()
+
+    mmsc_sent = MinMaxScaler()
+    X_train_s_Scaled[min_max_num_col] = mmsc_sent.fit_transform(X_train_s_Scaled[min_max_num_col])
+    X_test_s_Scaled[min_max_num_col] = mmsc_sent.transform(X_test_s_Scaled[min_max_num_col])
+
+    bc_sent = PowerTransformer(method='box-cox', standardize=False)
+    y_train_s_bc = bc_sent.fit_transform(y_train_s.values.reshape(-1, 1)).ravel()
+    y_test_s_bc = bc_sent.transform(y_test_s.values.reshape(-1, 1)).ravel()
+
+    model_s = {
+        'XGBR_Sentiment': XGBRegressor(),
+        # 'XGBR_Sentiment': XGBRegressor(**{'subsample': 0.9, 'n_estimators': 300, 'max_depth': 7, 'eta': 0.12}),
+    }
+    st.subheader("Modélisation avec prise en compte des sentiments")
+    _ = run_models(model_s,
+                   X_train_s_Scaled,
+                   X_test_s_Scaled,
+                   y_train_s_bc,
+                   y_test_s_bc,
+                   y_scaler=bc_sent,
+                   verbose=True,
+                   graph=True,
+                   test_size=25)
+    # Préparation des données SANS les sentiments
+
+    feats_nos = all_data_real_no_sent.drop(columns=['Global_Sales'])
+    target_nos = all_data_real_no_sent['Global_Sales']
+
+    encoder_no_sent = ce.BinaryEncoder(cols=cat_col, return_df=True)
+    feats_nos = encoder_no_sent.fit_transform(feats_nos)
+    feats_nos['Type'] = feats_nos['Type'].map({'Salon': 1, 'Portable': 0})
+
+    X_train_nos, X_test_nos, y_train_nos, y_test_nos = train_test_split(feats_nos,
+                                                                        target_nos,
+                                                                        test_size=test_s,
+                                                                        random_state=ran_stat)
+    bc_nos = PowerTransformer(method='box-cox', standardize=False)
+    y_train_nos_bc = bc_nos.fit_transform(y_train_nos.values.reshape(-1, 1)).ravel()
+    y_test_nos_bc = bc_nos.transform(y_test_nos.values.reshape(-1, 1)).ravel()
+
+    st.subheader("Modélisation sans prise en compte des sentiments")
+    model_nos = {
+        'XGBR_Without_Sentiment': XGBRegressor(),
+        # 'XGBR_Without_Sentiment': XGBRegressor(**{'subsample': 0.8, 'n_estimators': 600, 'max_depth': 6, 'eta': 0.12}),
+    }
+    _ = run_models(model_nos,
+                   X_train_nos,
+                   X_test_nos,
+                   y_train_nos_bc,
+                   y_test_nos_bc,
+                   y_scaler=bc_nos,
+                   verbose=True,
+                   graph=True,
+                   test_size=25)

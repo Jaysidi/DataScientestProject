@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Conception d'un modèle de Machine Learning des données",
+    page_title="Données brutes: Conception d'un modèle de Machine Learning",
     layout="wide",
     menu_items={})
 
@@ -68,16 +68,16 @@ with tab1:
     st.write(
         "Suite à l'exploration initiale des données et nos premières constatations, nous ajoutons le type de plateforme Salon/Portable.")
 
-    code = '''
-  li_salon = ['Wii','NES','X360','PS3','PS2','SNES','PS4','N64','PS','XB','PC','2600','XOne','GC','GEN','DC','SAT','SCD','NG','TG16','3DO','PCFX']
-  li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
-  df['Type'] = np.where(df['Platform'].isin(li_salon), 'Salon', 'Portable')'''
+  #   code = '''
+  # li_salon = ['Wii','NES','X360','PS3','PS2','SNES','PS4','N64','PS','XB','PC','2600','XOne','GC','GEN','DC','SAT','SCD','NG','TG16','3DO','PCFX']
+  # li_portable = ['GB','DS','GBA','3DS','PSP','WiiU','PSV','WS','GG']
+  # df['Type'] = np.where(df['Platform'].isin(li_salon), 'Salon', 'Portable')'''
+  #
+  #   st.code(code)
 
-    st.code(code)
-
-    st.write("Nous passons aussi l'année en entier.")
-    code = '''df['Year'] = df['Year'].astype(int)'''
-    st.code(code)
+    # st.write("Nous passons aussi l'année en entier.")
+    # code = '''df['Year'] = df['Year'].astype(int)'''
+    # st.code(code)
     ### FIN PARTIE 1
     ### Affichage des premières lignes du df
     st.dataframe(df.head())

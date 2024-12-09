@@ -1,4 +1,5 @@
 import os.path
+import joblib
 import pandas as pd
 import pickle
 import streamlit as st
@@ -14,6 +15,8 @@ metacritic_user_reviews = "UserReviews_Metacritic_Max500_Sample.csv"
 vg_merged_meta = "VGSales_Metacritic_Scores.csv"
 meta_metacritic_scores = "METADATA_Scores_Metacritic_V2.md"
 meta_metacritic_reviews = "METADATA_UserReviews_Metacritic_Max500.md"
+data_sentiment = 'data_sentiment_predicted.joblib'
+data_sentiment_100_500 = 'data_sentiment_predicted_100_500.joblib'
 
 @st.cache_data
 def load_csv_to_df(path_name, file_name):
@@ -29,6 +32,9 @@ def read_file(path_name, file_name):
 def read_pickle(path_name, file_name):
     return pickle.load(open(os.path.join(path_name, file_name), 'rb'))
 
+@st.cache_data
+def read_joblib(path_name, file_name):
+    return joblib.load(os.path.join(path_name, file_name))
 
 with st.spinner("Loading data..."):
     vgsales_original_df = load_csv_to_df(datasets_path, vgsales_original)
@@ -40,3 +46,5 @@ with st.spinner("Loading data..."):
     vgsales_metacritic_scores_df = load_csv_to_df(datasets_path, vg_merged_meta)
     metacritic_scores_md = read_file(datasets_path, meta_metacritic_scores)
     metacritic_reviews_md = read_file(datasets_path, meta_metacritic_reviews)
+    data_sentiment_df = read_joblib(datasets_path, data_sentiment)
+    data_sentiment_100_500_df = read_joblib(datasets_path, data_sentiment_100_500)
