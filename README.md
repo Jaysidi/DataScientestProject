@@ -62,6 +62,7 @@ To run the Streamlit app and explore the results interactively, follow these ste
 
    ```bash
    git clone https://github.com/Jaysidi/DataScientestProject.git
+   cd DataScientestProject
    ```
 
 
